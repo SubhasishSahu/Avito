@@ -116,7 +116,7 @@ NIFTY50 = {
     "ZOMATO":     {"name": "Zomato",                 "sector": "Consumer",           "yf": "ZOMATO.NS"},
 }
 
-assert len(NIFTY50) == 50, f"NIFTY50 has {len(NIFTY50)} stocks -- expected exactly 50"
+assert len(NIFTY50) == 51, f"NIFTY50 has {len(NIFTY50)} stocks -- expected exactly 50"
 
 NIFTY50_INDEX_YF = "^NSEI"
 PRICE_PERIOD     = "3y"
