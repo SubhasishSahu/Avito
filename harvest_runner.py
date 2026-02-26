@@ -471,3 +471,4 @@ log.info(f"Done: {summary}")
 if summary["status"] == "error":
     log.error("All stocks failed — check Yahoo Finance connectivity")
     sys.exit(1)
+“””
