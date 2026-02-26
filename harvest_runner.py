@@ -308,7 +308,7 @@ tickers=None  → harvest all 50 Nifty stocks
 tickers given → harvest those + sector peers only
 
 Returns summary dict — safe to log (no raw data, no secrets).
-"""
+“””
 run_id  = str(uuid.uuid4())[:8]
 started = datetime.utcnow()
 log.info(f"Harvest started — run_id: {run_id}")
