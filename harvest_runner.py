@@ -463,4 +463,3 @@ log.info(f"Done: {summary}")
 
 if summary["status"] not in ("ok", "partial"):
     sys.exit(1)
-```
