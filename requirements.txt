@@ -1,0 +1,25 @@
+# Agent_Trader — Avito
+# Works in: GitHub Actions, Streamlit Cloud, Google Colab
+
+# Data
+yfinance==0.2.51
+pandas==2.2.3
+numpy==1.26.4
+
+# Encryption
+cryptography==42.0.8
+
+# GitHub API
+requests==2.32.3
+
+# Dashboard
+streamlit==1.40.0
+plotly==5.24.1
+
+# Excel upload
+openpyxl==3.1.5
+xlrd==2.0.1
+
+# Utilities
+python-dateutil==2.9.0
+pytz==2024.2
