@@ -46,7 +46,7 @@ level=logging.INFO,
 format=”%(asctime)s [%(levelname)s] %(message)s”,
 datefmt=”%H:%M:%S”,
 )
-log = logging.getLogger(**name**)
+log = logging.getLogger(__name__)
 
 # Suppress noisy third-party loggers
 
@@ -260,10 +260,8 @@ except Exception as e:
 log.debug(f”  {ticker} attempt {attempt} ({t}): {e}”)
 time.sleep(1.5)
 
-```
 log.warning(f"  {ticker}: no price data after {len(fallbacks)} attempts")
 return None
-```
 
 def _fetch_fundamentals(yf_ticker: str,
 session: requests.Session) -> dict:
@@ -309,7 +307,6 @@ Main harvest function.
 tickers=None  → harvest all 50 Nifty stocks
 tickers given → harvest those + sector peers only
 
-```
 Returns summary dict — safe to log (no raw data, no secrets).
 """
 run_id  = str(uuid.uuid4())[:8]
@@ -443,10 +440,9 @@ return summary
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-if **name** == “**main**”:
+if __name__ == “__main__”:
 log.info(”=== Agent_Trader Harvest Runner v2 ===”)
 
-```
 # Connectivity check before doing any work
 conn   = gs.test_connection()
 all_ok = True
@@ -475,4 +471,3 @@ log.info(f"Done: {summary}")
 if summary["status"] == "error":
     log.error("All stocks failed — check Yahoo Finance connectivity")
     sys.exit(1)
-```
