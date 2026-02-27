@@ -314,210 +314,115 @@ PRICE_PERIOD  = "3y"
 
 
 # ---------------------------------------------------------------------------
-# Multi-browser rotation engine
+# Multi-browser TLS fingerprint rotation engine
 #
-# WHY: Stooq and Yahoo detect bots via TWO layers:
-#   Layer 1 - HTTP:  User-Agent + Accept/Accept-Language/Sec-* headers must
-#             form a CONSISTENT set matching a real browser. A Chrome UA with
-#             Firefox Accept headers is WORSE than no UA (immediate flag).
-#   Layer 2 - TLS:   ClientHello cipher suites, extension order, GREASE
-#             values differ by browser engine. curl_cffi replays exact TLS
-#             handshakes when available. Without it, plain requests still
-#             gains significant benefit from correct HTTP header profiles.
+# WHY: Stooq and Yahoo Finance detect and block datacenter IPs using TLS
+# fingerprinting -- they inspect the ClientHello cipher suites, extension
+# order, and GREASE values to identify non-browser clients.
 #
-# PROFILES (ordered best-first for Stooq/Yahoo evasion):
-#   1. safari_mac     -- WebKit engine, distinct TLS, no Sec-CH-UA hints,
-#                        less common for automated scrapers -> least flagged
-#   2. firefox_win    -- Gecko engine, different header ordering, no CH hints
-#   3. chrome_android -- Mobile UA, separate throttle bucket on many servers
-#   4. edge_win       -- Chromium but distinct UA string pattern
-#   5. chrome_win     -- Most common, most scrutinised -> last resort
+# HOW: curl_cffi replays exact browser TLS handshakes. Each impersonation
+# target produces a distinct ClientHello that is indistinguishable from a
+# real browser at the TLS layer. Rotating across Chrome, Safari, and Firefox
+# means even if one fingerprint is flagged, the others succeed.
 #
-# Each profile: (curl_cffi_target, UA_string, full_headers_dict)
-# Headers are ordered correctly per spec for each browser engine.
+# ROTATION ORDER per request (4 attempts total):
+#   Attempt 1: Chrome 120  (Win) -- most common desktop browser worldwide
+#   Attempt 2: Safari 15.5 (macOS) -- distinct cipher suite order vs Chrome
+#   Attempt 3: Firefox 110  -- different TLS extension order entirely
+#   Attempt 4: Chrome 107  -- older Chrome, different GREASE pattern
+#
+# Each has a distinct User-Agent string that matches the TLS fingerprint,
+# so both layers (HTTP + TLS) are consistent.
 # ---------------------------------------------------------------------------
 
+# (impersonation_target, User-Agent string)
 _BROWSER_PROFILES = [
     (
-        "safari15_5",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) "
-        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        "Version/17.2 Safari/605.1.15",
-        {   # Safari sends these in this exact order; no Sec-CH-UA (WebKit doesn't support)
-            "User-Agent":              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language":         "en-GB,en;q=0.9",
-            "Accept-Encoding":         "gzip, deflate, br",
-            "Connection":              "keep-alive",
-        },
-    ),
-    (
-        "firefox122",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
-        "Gecko/20100101 Firefox/122.0",
-        {   # Firefox header order: no Sec-CH-UA (Gecko doesn't support client hints)
-            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
-            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language":         "en-US,en;q=0.5",
-            "Accept-Encoding":         "gzip, deflate, br",
-            "Connection":              "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest":          "document",
-            "Sec-Fetch-Mode":          "navigate",
-            "Sec-Fetch-Site":          "none",
-            "Sec-Fetch-User":          "?1",
-        },
-    ),
-    (
         "chrome120",
-        "Mozilla/5.0 (Linux; Android 14; Pixel 8) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.6099.210 Mobile Safari/537.36",
-        {   # Chrome Android -- mobile UA, separate rate-limit bucket
-            "User-Agent":              "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.210 Mobile Safari/537.36",
-            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language":         "en-IN,en-GB;q=0.9,en;q=0.8",
-            "Accept-Encoding":         "gzip, deflate, br",
-            "Connection":              "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-CH-UA":               '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            "Sec-CH-UA-Mobile":        "?1",
-            "Sec-CH-UA-Platform":      '"Android"',
-            "Sec-Fetch-Dest":          "document",
-            "Sec-Fetch-Mode":          "navigate",
-            "Sec-Fetch-Site":          "none",
-            "Sec-Fetch-User":          "?1",
-        },
-    ),
-    (
-        "edge101",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
-        {   # Edge -- Chromium base but distinct UA and CH-UA brand
-            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
-            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-            "Accept-Language":         "en-US,en;q=0.9",
-            "Accept-Encoding":         "gzip, deflate, br",
-            "Connection":              "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-CH-UA":               '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
-            "Sec-CH-UA-Mobile":        "?0",
-            "Sec-CH-UA-Platform":      '"Windows"',
-            "Sec-Fetch-Dest":          "document",
-            "Sec-Fetch-Mode":          "navigate",
-            "Sec-Fetch-Site":          "none",
-            "Sec-Fetch-User":          "?1",
-        },
+        "Chrome/120.0.0.0 Safari/537.36",
     ),
     (
-        "chrome121",
+        "safari15_5",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_4) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/15.5 Safari/605.1.15",
+    ),
+    (
+        "firefox110",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:110.0) "
+        "Gecko/20100101 Firefox/110.0",
+    ),
+    (
+        "chrome107",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/121.0.0.0 Safari/537.36",
-        {   # Chrome Windows -- most common, most scrutinised, last resort
-            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-            "Accept-Language":         "en-US,en;q=0.9",
-            "Accept-Encoding":         "gzip, deflate, br",
-            "Connection":              "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-CH-UA":               '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-            "Sec-CH-UA-Mobile":        "?0",
-            "Sec-CH-UA-Platform":      '"Windows"',
-            "Sec-Fetch-Dest":          "document",
-            "Sec-Fetch-Mode":          "navigate",
-            "Sec-Fetch-Site":          "none",
-            "Sec-Fetch-User":          "?1",
-        },
+        "Chrome/107.0.0.0 Safari/537.36",
     ),
 ]
-
-# Map profile name -> curl_cffi impersonate target
-_CFFI_TARGET = {
-    "safari15_5":    "safari15_5",
-    "firefox122":    "firefox110",   # closest available in curl_cffi
-    "chrome120":     "chrome120",
-    "edge101":       "edge101",
-    "chrome121":     "chrome120",    # use chrome120 TLS for chrome121
-}
 
 # Detect curl_cffi once at import time
 try:
     from curl_cffi import requests as cffi_requests
     _CURL_CFFI_OK = True
-    log.info("curl_cffi available -- full TLS + HTTP browser impersonation active")
+    log.info("curl_cffi available -- TLS browser impersonation enabled")
 except ImportError:
     _CURL_CFFI_OK = False
-    log.info("curl_cffi not installed -- HTTP-layer rotation only (still effective)")
+    log.warning("curl_cffi not installed -- falling back to plain requests (less evasion)")
 
 
-def _make_session(headers: dict) -> requests.Session:
-    """Build a requests.Session with the given browser headers pre-set."""
-    s = requests.Session()
-    s.headers.clear()
-    for k, v in headers.items():
-        s.headers[k] = v
-    return s
+def _cffi_get(url: str, params: dict, impersonate: str, ua: str, timeout: int = 20):
+    """Single curl_cffi GET with a specific browser impersonation."""
+    from curl_cffi import requests as cffi_requests
+    return cffi_requests.get(
+        url,
+        params=params,
+        headers={"User-Agent": ua, "Accept": "text/html,*/*;q=0.9"},
+        impersonate=impersonate,
+        timeout=timeout,
+    )
 
 
-# Pre-built sessions, one per profile (reused across requests)
-_PROFILE_SESSIONS: dict = {}
-
-
-def _get_profile_session(profile_name: str, headers: dict) -> requests.Session:
-    if profile_name not in _PROFILE_SESSIONS:
-        _PROFILE_SESSIONS[profile_name] = _make_session(headers)
-    return _PROFILE_SESSIONS[profile_name]
+def _plain_get(url: str, params: dict, ua: str, timeout: int = 20):
+    """Fallback plain requests GET when curl_cffi not available."""
+    return requests.get(
+        url,
+        params=params,
+        headers={"User-Agent": ua},
+        timeout=timeout,
+    )
 
 
 def _rotating_get(url: str, params: dict, label: str, timeout: int = 20):
     """
-    Try each browser profile in order until one returns valid CSV data.
+    Try each browser profile in rotation until one succeeds.
     Returns (response_text, profile_name) or (None, None).
-
-    Detection avoidance:
-    - Each profile sends a complete, consistent header set for that browser
-    - Safari and Firefox profiles lack Sec-CH-UA (those browsers don't send it)
-    - curl_cffi adds TLS fingerprint matching when available
-    - Sessions are reused so TCP connections persist (more browser-like)
     """
-    for profile_name, ua, headers in _BROWSER_PROFILES:
+    for i, (impersonate, ua) in enumerate(_BROWSER_PROFILES):
         try:
             if _CURL_CFFI_OK:
-                from curl_cffi import requests as cffi_requests
-                impersonate = _CFFI_TARGET.get(profile_name, "chrome120")
-                r = cffi_requests.get(
-                    url, params=params, headers=headers,
-                    impersonate=impersonate, timeout=timeout,
-                )
+                r = _cffi_get(url, params, impersonate, ua, timeout)
             else:
-                sess = _get_profile_session(profile_name, headers)
-                r = sess.get(url, params=params, timeout=timeout)
+                r = _plain_get(url, params, ua, timeout)
 
             if r.status_code == 200:
                 text = r.text.strip()
-                # Valid Stooq CSV starts with "Date," header, not HTML
-                if (text
-                        and len(text) > 100
-                        and text.startswith("Date,")
-                        and "No data" not in text
-                        and "<html" not in text.lower()):
-                    log.debug(f"  {label}: success with [{profile_name}]")
-                    return text, profile_name
+                if text and "<html" not in text.lower() and "No data" not in text:
+                    log.debug(f"  {label}: success with {impersonate}")
+                    return text, impersonate
                 else:
-                    log.debug(f"  {label} [{profile_name}]: non-CSV response ({len(text)} bytes)")
+                    log.debug(f"  {label} [{impersonate}]: empty/html response")
             elif r.status_code == 429:
-                log.debug(f"  {label} [{profile_name}]: 429 -- pausing 2s before next profile")
-                time.sleep(2.0)
+                log.debug(f"  {label} [{impersonate}]: 429 rate-limited, rotating")
+                time.sleep(1.5)
             else:
-                log.debug(f"  {label} [{profile_name}]: HTTP {r.status_code}")
+                log.debug(f"  {label} [{impersonate}]: HTTP {r.status_code}")
 
         except Exception as e:
-            log.debug(f"  {label} [{profile_name}]: {type(e).__name__}: {e}")
-
-        # Brief pause between profile attempts to avoid hammering
-        time.sleep(0.3)
+            log.debug(f"  {label} [{impersonate}]: {type(e).__name__}: {e}")
+            if i < len(_BROWSER_PROFILES) - 1:
+                time.sleep(0.5)
 
     return None, None
 
