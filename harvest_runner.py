@@ -114,6 +114,195 @@ NIFTY50 = {
 
 assert len(NIFTY50) == 50, f"NIFTY50 has {len(NIFTY50)} stocks -- expected exactly 50"
 
+# ---------------------------------------------------------------------------
+# BROKER_TICKER_MAP
+# Maps broker-export ticker formats to canonical NSE symbols.
+#
+# Why this exists:
+#   Mobile broker apps (Zerodha, Groww, Upstox etc.) export holdings with
+#   suffixed tickers like "HDFCBANKEQ", "TATCHEEQ" etc. The "EQ" suffix
+#   denotes the equity series on NSE but is not part of the trading symbol.
+#   Some apps also use older/internal names that differ from current NSE symbols.
+#
+# Structure: broker_ticker -> (nse_symbol, company_name, sector, stooq_sym)
+#   - nse_symbol:   canonical NSE symbol used for price fetch
+#   - company_name: human-readable display name
+#   - sector:       sector for peer grouping
+#   - stooq_sym:    lowercase symbol for Stooq CSV API (None = use nse_symbol.lower()+".ns")
+#
+# Confidence notes (in comments):
+#   HIGH   = verified against NSE symbol list
+#   MEDIUM = likely correct, verify if this stock is important to you
+#   LOW    = ambiguous -- marked with ⚠️, please confirm and update
+# ---------------------------------------------------------------------------
+BROKER_TICKER_MAP = {
+    # ── Nifty50 EQ-suffix variants (strip EQ -> standard symbol) ──────────────
+    "HDFCBANKEQ":   ("HDFCBANK",   "HDFC Bank",              "Financial Services", None),
+    "ICICIBANKNEQ": ("ICICIBANK",  "ICICI Bank",             "Financial Services", None),
+    "KOTAKBANKEQ":  ("KOTAKBANK",  "Kotak Mahindra Bank",    "Financial Services", None),
+    "AXISBANKEQ":   ("AXISBANK",   "Axis Bank",              "Financial Services", None),
+    "SBINEQ":       ("SBIN",       "State Bank of India",    "Financial Services", None),
+    "BAJFINANCEEQ": ("BAJFINANCE", "Bajaj Finance",          "Financial Services", None),
+    "BAJAJFINSVQ":  ("BAJAJFINSV", "Bajaj Finserv",          "Financial Services", None),
+    "HDFCLIFEEQ":   ("HDFCLIFE",   "HDFC Life Insurance",    "Financial Services", None),
+    "SBILIFEQ":     ("SBILIFE",    "SBI Life Insurance",     "Financial Services", None),
+    "INDUSINDBKEQ": ("INDUSINDBK", "IndusInd Bank",          "Financial Services", None),
+    "TCSEQ":        ("TCS",        "Tata Consultancy",       "IT",                 None),
+    "INFYEQ":       ("INFY",       "Infosys",                "IT",                 None),
+    "HCLTECHEQ":    ("HCLTECH",    "HCL Technologies",       "IT",                 None),
+    "WIPROEQ":      ("WIPRO",      "Wipro",                  "IT",                 None),
+    "TECHMEQ":      ("TECHM",      "Tech Mahindra",          "IT",                 None),
+    "LTIMEQ":       ("LTIM",       "LTIMindtree",            "IT",                 None),
+    "RELIANCEEQ":   ("RELIANCE",   "Reliance Industries",    "Oil & Gas",          None),
+    "ONGCEQ":       ("ONGC",       "ONGC",                   "Oil & Gas",          None),
+    "BPCLEQ":       ("BPCL",       "BPCL",                   "Oil & Gas",          None),
+    "COALINDIAEQ":  ("COALINDIA",  "Coal India",             "Oil & Gas",          None),
+    "POWERGRIDQ":   ("POWERGRID",  "Power Grid Corp",        "Oil & Gas",          None),
+    "NTPCEQ":       ("NTPC",       "NTPC",                   "Oil & Gas",          None),
+    "HINDUNILVREQ": ("HINDUNILVR", "Hindustan Unilever",     "Consumer",           None),
+    "ITCEQ":        ("ITC",        "ITC",                    "Consumer",           None),
+    "NESTLEINDEQ":  ("NESTLEIND",  "Nestle India",           "Consumer",           None),
+    "BRITANNIAEQ":  ("BRITANNIA",  "Britannia Industries",   "Consumer",           None),
+    "TATACONSUMEQ": ("TATACONSUM", "Tata Consumer Products", "Consumer",           None),
+    "TITANEQ":      ("TITAN",      "Titan Company",          "Consumer",           None),
+    "ASIANPAINTEQ": ("ASIANPAINT", "Asian Paints",           "Consumer",           None),
+    "ZOMATOEQ":     ("ZOMATO",     "Zomato",                 "Consumer",           None),
+    "MARUTIEQ":     ("MARUTI",     "Maruti Suzuki",          "Auto",               None),
+    "BAJAJ-AUTOEQ": ("BAJAJ-AUTO", "Bajaj Auto",             "Auto",               None),
+    "HEROMOTOCOEQ": ("HEROMOTOCO", "Hero MotoCorp",          "Auto",               None),
+    "EICHERMOTEQ":  ("EICHERMOT",  "Eicher Motors",          "Auto",               None),
+    "TATAMOTORSEQ": ("TATAMOTORS", "Tata Motors",            "Auto",               None),
+    "SUNPHARMAEQ":  ("SUNPHARMA",  "Sun Pharmaceutical",     "Pharma",             None),
+    "DRREDYEQ":     ("DRREDDY",    "Dr Reddys Labs",         "Pharma",             None),
+    "CIPLAYEQ":     ("CIPLA",      "Cipla",                  "Pharma",             None),
+    "DIVISLABEQ":   ("DIVISLAB",   "Divis Laboratories",     "Pharma",             None),
+    "APOLLOHOSPEQ": ("APOLLOHOSP", "Apollo Hospitals",       "Pharma",             None),
+    "TATASTEELEQ":  ("TATASTEEL",  "Tata Steel",             "Metals",             None),
+    "JSWSTEELEQ":   ("JSWSTEEL",   "JSW Steel",              "Metals",             None),
+    "HINDALCOEQ":   ("HINDALCO",   "Hindalco Industries",    "Metals",             None),
+    "ADANIEQ":      ("ADANIENT",   "Adani Enterprises",      "Metals",             None),
+    "LTEQ":         ("LT",         "Larsen and Toubro",      "Infrastructure",     None),
+    "ADANIPORTSEQ": ("ADANIPORTS", "Adani Ports",            "Infrastructure",     None),
+    "ULTRACEMCOEQ": ("ULTRACEMCO", "UltraTech Cement",       "Cement",             None),
+    "GRASIMEQ":     ("GRASIM",     "Grasim Industries",      "Cement",             None),
+    "BHARTIARTLEQ": ("BHARTIARTL", "Bharti Airtel",          "Telecom",            None),
+
+    # ── User portfolio non-Nifty50 holdings ───────────────────────────────────
+    # HIGH confidence
+    "ADANIGREENEQ": ("ADANIGREEN",  "Adani Green Energy",          "Energy",            "adanigreen.ns"),
+    "MUNDRAPORTEQ": ("ADANIPORTS",  "Adani Ports & SEZ",           "Infrastructure",    "adaniports.ns"),
+    "AUBANKEQ":     ("AUBANK",      "AU Small Finance Bank",       "Financial Services","aubank.ns"),
+    "BDLEQ":        ("BDL",         "Bharat Dynamics Ltd",         "Defence",           "bdl.ns"),
+    "BHAELEEQ":     ("BHEL",        "Bharat Heavy Electricals",    "Capital Goods",     "bhel.ns"),
+    "BHAFOREQ":     ("BHARATFORG",  "Bharat Forge",                "Auto Ancillary",    "bharatforg.ns"),
+    "CAMSEQ":       ("CAMS",        "Computer Age Mgmt Services",  "Financial Services","cams.ns"),
+    "ENGINDEQ":     ("ENGINERSIN",  "Engineers India",             "Infrastructure",    "enginersin.ns"),
+    "GUJMINEQ":     ("GMDC",        "Gujarat Mineral Dev Corp",    "Metals",            "gmdc.ns"),
+    "GPPLEQ":       ("GPPL",        "Gujarat Pipavav Port",        "Infrastructure",    "gppl.ns"),
+    "HEGLTDEQ":     ("HEG",         "HEG Limited",                 "Metals",            "heg.ns"),
+    "HALEQ":        ("HAL",         "Hindustan Aeronautics",       "Defence",           "hal.ns"),
+    "HINCOPEQ":     ("HINDCOPPER",  "Hindustan Copper",            "Metals",            "hindcopper.ns"),
+    "IRCTCEQ":      ("IRCTC",       "Indian Railway Catering",     "Consumer",          "irctc.ns"),
+    "IREDAEQ":      ("IREDA",       "Indian Renewable Energy Dev", "Energy",            "ireda.ns"),
+    "IONEXCEQ":     ("IONEXCHANGE", "Ion Exchange India",          "Chemicals",         "ionexchange.ns"),
+    "JIOFINEQ":     ("JIOFIN",      "Jio Financial Services",      "Financial Services","jiofin.ns"),
+    "LAURUSLABSEQ": ("LAURUSLABS",  "Laurus Labs",                 "Pharma",            "lauruslabs.ns"),
+    "MAZDOCKEQ":    ("MAZDOCK",     "Mazagon Dock Shipbuilders",   "Defence",           "mazdock.ns"),
+    "NATALUEQ":     ("NATIONALUM",  "National Aluminium Company",  "Metals",            "nationalum.ns"),
+    "NMDCEQ":       ("NMDC",        "NMDC",                        "Metals",            "nmdc.ns"),
+    "PARASEQ":      ("PARAS",       "Paras Defence & Space Tech",  "Defence",           "paras.ns"),
+    "POWFINEQ":     ("PFC",         "Power Finance Corporation",   "Financial Services","pfc.ns"),
+    "RVNLEQ":       ("RVNL",        "Rail Vikas Nigam",            "Infrastructure",    "rvnl.ns"),
+    "RECLTDEQ":     ("RECLTD",      "REC Limited",                 "Financial Services","recltd.ns"),
+    "RELINDEQ":     ("RELINFRA",    "Reliance Infrastructure",     "Infrastructure",    "relinfra.ns"),
+    "SPANDANAEQ":   ("SPANDANA",    "Spandana Sphoorty Financial", "Financial Services","spandana.ns"),
+    "SANDUMAEQ":    ("SANDUMA",     "Sandur Manganese & Iron",     "Metals",            "sanduma.ns"),
+    "TATCHEEQ":     ("TATATECH",    "Tata Technologies",           "IT",                "tatatech.ns"),
+    "TRITURBINEEQ": ("TRITURBINE",  "Triveni Turbine",             "Capital Goods",     "triturbine.ns"),
+    "ZETECHEQ":     ("ZENTEC",      "Zen Technologies",            "Defence",           "zentec.ns"),
+
+    # MEDIUM confidence
+    "HDFCMFGETFEQ": ("HDFCNIFETF", "HDFC Nifty 50 ETF",          "ETF",               "hdfcnifetf.ns"),
+    "LGEINDIAEQ":   ("LGINDIA",    "LG Balakrishnan & Bros",      "Auto Ancillary",    "lgindia.ns"),
+    "GOLTELEQ":     ("GOLTELE",    "Goldiam International",       "Consumer",          "goltele.ns"),
+    "OMDCEQ":       ("OMDC",       "Orissa Minerals Dev Corp",    "Metals",            "omdc.ns"),
+    "TATIROEQ":     ("TATASTEEL",  "Tata Steel",                  "Metals",            "tatasteel.ns"),
+
+    # LOW confidence -- ⚠️ please verify these 5 against your actual holdings
+    "DEWHOUEQ":     ("DELHIVERY",  "Delhivery",                   "Logistics",         "delhivery.ns"),   # ⚠️ DEWHOUS unclear
+    "GOLINTEQ":     ("GOLDENTEK",  "Goldentek",                   "Consumer",          None),             # ⚠️ symbol unconfirmed
+    "NAVBHAEQ":     ("NAVINFRA",   "Nav Bharat Ventures",         "Metals",            None),             # ⚠️ ambiguous
+    "ROYAIREQ":     ("ROYALIND",   "Royal Industries",            "Unknown",           None),             # ⚠️ unclear
+    "STABANEQ":     ("STABAN",     "Standard Industries",         "Textiles",          "staban.ns"),      # ⚠️ uncommon
+}
+
+
+def normalize_ticker(raw: str) -> str:
+    """
+    Convert a broker-export ticker to canonical NSE symbol.
+
+    Resolution order:
+      1. Direct lookup in BROKER_TICKER_MAP  (e.g. HALEQ -> HAL)
+      2. Already a canonical Nifty50 symbol  (pass through)
+      3. Strip trailing EQ/BE/BL/N1/N2 series suffix, re-check maps
+      4. If suffix was stripped but still unknown, return without suffix
+      5. Return uppercase as-is (completely unknown ticker)
+    """
+    import re
+    t = raw.strip().upper()
+
+    # 1. Direct map lookup
+    if t in BROKER_TICKER_MAP:
+        return BROKER_TICKER_MAP[t][0]
+
+    # 2. Already canonical Nifty50
+    if t in NIFTY50:
+        return t
+
+    # 3 & 4. Strip common broker suffixes and re-check
+    stripped = re.sub(r"(EQ|BE|BL|N1|N2)$", "", t).rstrip("-")
+    if stripped != t:
+        if stripped in NIFTY50:
+            return stripped
+        if stripped in BROKER_TICKER_MAP:
+            return BROKER_TICKER_MAP[stripped][0]
+        # Suffix stripped but still unknown -> return without suffix
+        # (harvest will attempt Stooq with this symbol)
+        return stripped
+
+    # 5. Completely unknown, return as-is
+    return t
+
+
+def get_ticker_meta(nse_symbol: str) -> dict:
+    """
+    Return metadata dict for any NSE symbol.
+    Checks NIFTY50 first, then synthesises from BROKER_TICKER_MAP.
+    Returns minimal dict if unknown.
+    """
+    if nse_symbol in NIFTY50:
+        meta = dict(NIFTY50[nse_symbol])
+        meta["stooq"] = meta.get("stooq", f"{nse_symbol.lower()}.ns")
+        return meta
+
+    # Search BROKER_TICKER_MAP values for this NSE symbol
+    for broker_t, (sym, name, sector, stooq) in BROKER_TICKER_MAP.items():
+        if sym == nse_symbol:
+            return {
+                "name":   name,
+                "sector": sector,
+                "stooq":  stooq or f"{nse_symbol.lower()}.ns",
+                "yf":     f"{nse_symbol}.NS",
+            }
+
+    return {
+        "name":   nse_symbol,
+        "sector": "Unknown",
+        "stooq":  f"{nse_symbol.lower()}.ns",
+        "yf":     f"{nse_symbol}.NS",
+    }
+
+
 THROTTLE_SECS = 0.5
 PRICE_PERIOD  = "3y"   # for yfinance fallback
 
@@ -331,11 +520,30 @@ def _compute_alpha(stock_ret, idx_ret, beta):
 # ---------------------------------------------------------------------------
 
 def get_peer_tickers(tickers):
-    sectors = {NIFTY50[t]["sector"] for t in tickers if t in NIFTY50}
+    """
+    Expand a list of holding tickers to include Nifty50 sector peers.
+    Normalizes broker-format tickers (e.g. HALEQ -> HAL) before lookup.
+    Non-Nifty50 holdings are included as-is so they still get price data.
+    """
+    # Normalize incoming broker tickers
+    normalized = [normalize_ticker(t) for t in tickers]
+
+    # Split: Nifty50 members vs non-Nifty50 holdings
+    in_nifty  = [t for t in normalized if t in NIFTY50]
+    out_nifty = [t for t in normalized if t not in NIFTY50]
+
+    if out_nifty:
+        log.info(f"Non-Nifty50 holdings (will fetch individually): {out_nifty}")
+
+    # Sector peers from Nifty50
+    sectors = {NIFTY50[t]["sector"] for t in in_nifty}
     peers   = {t for t, info in NIFTY50.items() if info["sector"] in sectors}
-    peers.update(tickers)
-    result = [t for t in peers if t in NIFTY50]
-    log.info(f"Holdings: {len(tickers)} | Sectors: {sectors} | With peers: {len(result)}")
+    peers.update(in_nifty)
+
+    nifty_result = [t for t in peers if t in NIFTY50]
+    result = nifty_result + [t for t in out_nifty if t not in nifty_result]
+
+    log.info(f"Holdings: {len(normalized)} | Nifty50 peers: {len(nifty_result)} | Extra: {len(out_nifty)} | Total universe: {len(result)}")
     return result
 
 
@@ -364,7 +572,7 @@ def harvest(tickers=None):
     failed       = []
 
     for i, ticker in enumerate(universe, 1):
-        meta = NIFTY50.get(ticker, {})
+        meta = get_ticker_meta(ticker)   # works for Nifty50 AND extended universe
         log.info(f"[{i}/{len(universe)}] {ticker}")
 
         prices = _fetch_prices(ticker, meta)

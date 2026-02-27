@@ -93,20 +93,22 @@ def fmt_inr(val) -> str:
 
 
 def ticker_suggestions(raw: str) -> str:
-    """Fuzzy correct common ticker mistakes."""
-    fixes = {
-        "HDFC":        "HDFCBANK",
-        "TATA MOTORS": "TATAMOTORS",
-        "TATA STEEL":  "TATASTEEL",
-        "INFY":        "INFY",
-        "SBI":         "SBIN",
-        "BAJAJ FIN":   "BAJFINANCE",
-        "WIPRO LTD":   "WIPRO",
-        "HCL":         "HCLTECH",
-        "AIRTEL":      "BHARTIARTL",
-        "ZOMATO LTD":  "ZOMATO",
-    }
-    return fixes.get(raw.strip().upper(), raw.strip().upper())
+    """
+    Normalise broker-export tickers to canonical NSE symbols.
+    Delegates to harvest_runner.normalize_ticker() which covers:
+      - EQ-suffix variants (HDFCBANKEQ -> HDFCBANK)
+      - Broker internal names (MUNDRAPORTEQ -> ADANIPORTS)
+      - 41 user portfolio non-Nifty50 holdings (HALEQ -> HAL, etc.)
+      - Generic EQ/BE/BL suffix stripping as fallback
+    """
+    try:
+        import harvest_runner as hr
+        return hr.normalize_ticker(raw)
+    except Exception:
+        # Fallback if harvest_runner not importable in Streamlit context
+        import re
+        t = raw.strip().upper()
+        return re.sub(r"(EQ|BE|BL|N1|N2)$", "", t).rstrip("-") or t
 
 
 def parse_excel(uploaded_file) -> pd.DataFrame | None:
