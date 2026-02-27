@@ -1,18 +1,20 @@
 """
 Agent_Trader -- Harvest Runner
-Data source: NSE India official APIs (nseindia.com)
-  - Price history  : /api/historical/cm/equity?symbol=X&series=EQ&from=&to=
-  - Quote/fundam.  : /api/quote-equity?symbol=X
-  - Index history  : /api/historical/indicesHistory?indexType=NIFTY+50&from=&to=
+Data source strategy (waterfall, first success wins per ticker):
+  1. Stooq CSV  -- stooq.com serves .NS historical data, no IP blocking,
+                   no auth, no cookies. Works from any datacenter IP.
+  2. yfinance   -- fallback; works when Yahoo isn't rate-limiting
+                   (reliable at off-peak hours / midnight IST).
 
-No API key required. NSE does not block cloud/datacenter IP ranges.
-
-Analytics computed locally: RSI, MACD, Beta, CAGR, VaR, Alpha, Max Drawdown.
+Analytics: RSI, MACD, Beta, CAGR, VaR, Alpha, Max Drawdown (all local).
 
 Fix history:
-  BUG_1-9  (see previous comments -- yfinance/curl_cffi stack)
-  BUG_10   yfinance rate-limited at IP level on GitHub Actions
-           -> switched to NSE India official API, no rate limit
+  BUG_1-9  yfinance/curl_cffi stack issues
+  BUG_10   Yahoo rate-limits GitHub Actions IPs -> added NSE as primary
+  BUG_11   NSE also blocks datacenter IPs during market hours
+           -> switched to Stooq (primary) + yfinance (fallback)
+           Stooq is a Polish financial aggregator that mirrors global
+           exchange data including NSE (.NS suffix) with no IP filtering.
 """
 import os
 import sys
@@ -20,6 +22,7 @@ import logging
 import warnings
 import uuid
 import time
+import io
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -36,258 +39,224 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# Silence noisy loggers
+for _lib in ("yfinance", "urllib3", "peewee"):
+    logging.getLogger(_lib).setLevel(logging.ERROR)
+
 
 # ---------------------------------------------------------------------------
 # Nifty50 Universe: exactly 50 unique stocks, sector-mapped
+# stooq_sym: lowercase symbol for Stooq API  (e.g. "hdfcbank.ns")
+# yf_sym:    NSE symbol for yfinance fallback  (e.g. "HDFCBANK.NS")
 # ---------------------------------------------------------------------------
 NIFTY50 = {
     # Financial Services -- 10
-    "HDFCBANK":   {"name": "HDFC Bank",              "sector": "Financial Services"},
-    "ICICIBANK":  {"name": "ICICI Bank",             "sector": "Financial Services"},
-    "KOTAKBANK":  {"name": "Kotak Mahindra Bank",    "sector": "Financial Services"},
-    "AXISBANK":   {"name": "Axis Bank",              "sector": "Financial Services"},
-    "SBIN":       {"name": "State Bank of India",    "sector": "Financial Services"},
-    "BAJFINANCE": {"name": "Bajaj Finance",          "sector": "Financial Services"},
-    "BAJAJFINSV": {"name": "Bajaj Finserv",          "sector": "Financial Services"},
-    "HDFCLIFE":   {"name": "HDFC Life Insurance",    "sector": "Financial Services"},
-    "SBILIFE":    {"name": "SBI Life Insurance",     "sector": "Financial Services"},
-    "INDUSINDBK": {"name": "IndusInd Bank",          "sector": "Financial Services"},
+    "HDFCBANK":   {"name": "HDFC Bank",              "sector": "Financial Services", "stooq": "hdfcbank.ns",   "yf": "HDFCBANK.NS"},
+    "ICICIBANK":  {"name": "ICICI Bank",             "sector": "Financial Services", "stooq": "icicibank.ns",  "yf": "ICICIBANK.NS"},
+    "KOTAKBANK":  {"name": "Kotak Mahindra Bank",    "sector": "Financial Services", "stooq": "kotakbank.ns",  "yf": "KOTAKBANK.NS"},
+    "AXISBANK":   {"name": "Axis Bank",              "sector": "Financial Services", "stooq": "axisbank.ns",   "yf": "AXISBANK.NS"},
+    "SBIN":       {"name": "State Bank of India",    "sector": "Financial Services", "stooq": "sbin.ns",       "yf": "SBIN.NS"},
+    "BAJFINANCE": {"name": "Bajaj Finance",          "sector": "Financial Services", "stooq": "bajfinance.ns", "yf": "BAJFINANCE.NS"},
+    "BAJAJFINSV": {"name": "Bajaj Finserv",          "sector": "Financial Services", "stooq": "bajajfinsv.ns", "yf": "BAJAJFINSV.NS"},
+    "HDFCLIFE":   {"name": "HDFC Life Insurance",    "sector": "Financial Services", "stooq": "hdfclife.ns",   "yf": "HDFCLIFE.NS"},
+    "SBILIFE":    {"name": "SBI Life Insurance",     "sector": "Financial Services", "stooq": "sbilife.ns",    "yf": "SBILIFE.NS"},
+    "INDUSINDBK": {"name": "IndusInd Bank",          "sector": "Financial Services", "stooq": "indusindbk.ns", "yf": "INDUSINDBK.NS"},
     # IT -- 6
-    "TCS":        {"name": "Tata Consultancy",       "sector": "IT"},
-    "INFY":       {"name": "Infosys",                "sector": "IT"},
-    "HCLTECH":    {"name": "HCL Technologies",       "sector": "IT"},
-    "WIPRO":      {"name": "Wipro",                  "sector": "IT"},
-    "TECHM":      {"name": "Tech Mahindra",          "sector": "IT"},
-    "LTIM":       {"name": "LTIMindtree",            "sector": "IT"},
+    "TCS":        {"name": "Tata Consultancy",       "sector": "IT",                 "stooq": "tcs.ns",        "yf": "TCS.NS"},
+    "INFY":       {"name": "Infosys",                "sector": "IT",                 "stooq": "infy.ns",       "yf": "INFY.NS"},
+    "HCLTECH":    {"name": "HCL Technologies",       "sector": "IT",                 "stooq": "hcltech.ns",    "yf": "HCLTECH.NS"},
+    "WIPRO":      {"name": "Wipro",                  "sector": "IT",                 "stooq": "wipro.ns",      "yf": "WIPRO.NS"},
+    "TECHM":      {"name": "Tech Mahindra",          "sector": "IT",                 "stooq": "techm.ns",      "yf": "TECHM.NS"},
+    "LTIM":       {"name": "LTIMindtree",            "sector": "IT",                 "stooq": "ltim.ns",       "yf": "LTIM.NS"},
     # Oil & Gas -- 6
-    "RELIANCE":   {"name": "Reliance Industries",    "sector": "Oil & Gas"},
-    "ONGC":       {"name": "ONGC",                   "sector": "Oil & Gas"},
-    "BPCL":       {"name": "BPCL",                   "sector": "Oil & Gas"},
-    "COALINDIA":  {"name": "Coal India",             "sector": "Oil & Gas"},
-    "POWERGRID":  {"name": "Power Grid Corp",        "sector": "Oil & Gas"},
-    "NTPC":       {"name": "NTPC",                   "sector": "Oil & Gas"},
+    "RELIANCE":   {"name": "Reliance Industries",    "sector": "Oil & Gas",          "stooq": "reliance.ns",   "yf": "RELIANCE.NS"},
+    "ONGC":       {"name": "ONGC",                   "sector": "Oil & Gas",          "stooq": "ongc.ns",       "yf": "ONGC.NS"},
+    "BPCL":       {"name": "BPCL",                   "sector": "Oil & Gas",          "stooq": "bpcl.ns",       "yf": "BPCL.NS"},
+    "COALINDIA":  {"name": "Coal India",             "sector": "Oil & Gas",          "stooq": "coalindia.ns",  "yf": "COALINDIA.NS"},
+    "POWERGRID":  {"name": "Power Grid Corp",        "sector": "Oil & Gas",          "stooq": "powergrid.ns",  "yf": "POWERGRID.NS"},
+    "NTPC":       {"name": "NTPC",                   "sector": "Oil & Gas",          "stooq": "ntpc.ns",       "yf": "NTPC.NS"},
     # Consumer -- 8
-    "HINDUNILVR": {"name": "Hindustan Unilever",     "sector": "Consumer"},
-    "ITC":        {"name": "ITC",                    "sector": "Consumer"},
-    "NESTLEIND":  {"name": "Nestle India",           "sector": "Consumer"},
-    "BRITANNIA":  {"name": "Britannia Industries",   "sector": "Consumer"},
-    "TATACONSUM": {"name": "Tata Consumer Products", "sector": "Consumer"},
-    "TITAN":      {"name": "Titan Company",          "sector": "Consumer"},
-    "ASIANPAINT": {"name": "Asian Paints",           "sector": "Consumer"},
-    "ZOMATO":     {"name": "Zomato",                 "sector": "Consumer"},
+    "HINDUNILVR": {"name": "Hindustan Unilever",     "sector": "Consumer",           "stooq": "hindunilvr.ns", "yf": "HINDUNILVR.NS"},
+    "ITC":        {"name": "ITC",                    "sector": "Consumer",           "stooq": "itc.ns",        "yf": "ITC.NS"},
+    "NESTLEIND":  {"name": "Nestle India",           "sector": "Consumer",           "stooq": "nestleind.ns",  "yf": "NESTLEIND.NS"},
+    "BRITANNIA":  {"name": "Britannia Industries",   "sector": "Consumer",           "stooq": "britannia.ns",  "yf": "BRITANNIA.NS"},
+    "TATACONSUM": {"name": "Tata Consumer Products", "sector": "Consumer",           "stooq": "tataconsum.ns", "yf": "TATACONSUM.NS"},
+    "TITAN":      {"name": "Titan Company",          "sector": "Consumer",           "stooq": "titan.ns",      "yf": "TITAN.NS"},
+    "ASIANPAINT": {"name": "Asian Paints",           "sector": "Consumer",           "stooq": "asianpaint.ns", "yf": "ASIANPAINT.NS"},
+    "ZOMATO":     {"name": "Zomato",                 "sector": "Consumer",           "stooq": "zomato.ns",     "yf": "ZOMATO.NS"},
     # Auto -- 6
-    "MARUTI":     {"name": "Maruti Suzuki",          "sector": "Auto"},
-    "BAJAJ-AUTO": {"name": "Bajaj Auto",             "sector": "Auto"},
-    "HEROMOTOCO": {"name": "Hero MotoCorp",          "sector": "Auto"},
-    "EICHERMOT":  {"name": "Eicher Motors",          "sector": "Auto"},
-    "M&M":        {"name": "Mahindra & Mahindra",    "sector": "Auto"},
-    "TATAMOTORS": {"name": "Tata Motors",            "sector": "Auto"},
+    "MARUTI":     {"name": "Maruti Suzuki",          "sector": "Auto",               "stooq": "maruti.ns",     "yf": "MARUTI.NS"},
+    "BAJAJ-AUTO": {"name": "Bajaj Auto",             "sector": "Auto",               "stooq": "bajaj-auto.ns", "yf": "BAJAJ-AUTO.NS"},
+    "HEROMOTOCO": {"name": "Hero MotoCorp",          "sector": "Auto",               "stooq": "heromotoco.ns", "yf": "HEROMOTOCO.NS"},
+    "EICHERMOT":  {"name": "Eicher Motors",          "sector": "Auto",               "stooq": "eichermot.ns",  "yf": "EICHERMOT.NS"},
+    "M&M":        {"name": "Mahindra & Mahindra",    "sector": "Auto",               "stooq": "m&m.ns",        "yf": "M&M.NS"},
+    "TATAMOTORS": {"name": "Tata Motors",            "sector": "Auto",               "stooq": "tatamotors.ns", "yf": "TATAMOTORS.NS"},
     # Pharma -- 5
-    "SUNPHARMA":  {"name": "Sun Pharmaceutical",     "sector": "Pharma"},
-    "DRREDDY":    {"name": "Dr Reddys Labs",         "sector": "Pharma"},
-    "CIPLA":      {"name": "Cipla",                  "sector": "Pharma"},
-    "DIVISLAB":   {"name": "Divis Laboratories",     "sector": "Pharma"},
-    "APOLLOHOSP": {"name": "Apollo Hospitals",       "sector": "Pharma"},
+    "SUNPHARMA":  {"name": "Sun Pharmaceutical",     "sector": "Pharma",             "stooq": "sunpharma.ns",  "yf": "SUNPHARMA.NS"},
+    "DRREDDY":    {"name": "Dr Reddys Labs",         "sector": "Pharma",             "stooq": "drreddy.ns",    "yf": "DRREDDY.NS"},
+    "CIPLA":      {"name": "Cipla",                  "sector": "Pharma",             "stooq": "cipla.ns",      "yf": "CIPLA.NS"},
+    "DIVISLAB":   {"name": "Divis Laboratories",     "sector": "Pharma",             "stooq": "divislab.ns",   "yf": "DIVISLAB.NS"},
+    "APOLLOHOSP": {"name": "Apollo Hospitals",       "sector": "Pharma",             "stooq": "apollohosp.ns", "yf": "APOLLOHOSP.NS"},
     # Metals -- 4
-    "TATASTEEL":  {"name": "Tata Steel",             "sector": "Metals"},
-    "JSWSTEEL":   {"name": "JSW Steel",              "sector": "Metals"},
-    "HINDALCO":   {"name": "Hindalco Industries",    "sector": "Metals"},
-    "ADANIENT":   {"name": "Adani Enterprises",      "sector": "Metals"},
+    "TATASTEEL":  {"name": "Tata Steel",             "sector": "Metals",             "stooq": "tatasteel.ns",  "yf": "TATASTEEL.NS"},
+    "JSWSTEEL":   {"name": "JSW Steel",              "sector": "Metals",             "stooq": "jswsteel.ns",   "yf": "JSWSTEEL.NS"},
+    "HINDALCO":   {"name": "Hindalco Industries",    "sector": "Metals",             "stooq": "hindalco.ns",   "yf": "HINDALCO.NS"},
+    "ADANIENT":   {"name": "Adani Enterprises",      "sector": "Metals",             "stooq": "adanient.ns",   "yf": "ADANIENT.NS"},
     # Infrastructure -- 2
-    "LT":         {"name": "Larsen and Toubro",      "sector": "Infrastructure"},
-    "ADANIPORTS": {"name": "Adani Ports",            "sector": "Infrastructure"},
+    "LT":         {"name": "Larsen and Toubro",      "sector": "Infrastructure",     "stooq": "lt.ns",         "yf": "LT.NS"},
+    "ADANIPORTS": {"name": "Adani Ports",            "sector": "Infrastructure",     "stooq": "adaniports.ns", "yf": "ADANIPORTS.NS"},
     # Cement -- 2
-    "ULTRACEMCO": {"name": "UltraTech Cement",       "sector": "Cement"},
-    "GRASIM":     {"name": "Grasim Industries",      "sector": "Cement"},
+    "ULTRACEMCO": {"name": "UltraTech Cement",       "sector": "Cement",             "stooq": "ultracemco.ns", "yf": "ULTRACEMCO.NS"},
+    "GRASIM":     {"name": "Grasim Industries",      "sector": "Cement",             "stooq": "grasim.ns",     "yf": "GRASIM.NS"},
     # Telecom -- 1
-    "BHARTIARTL": {"name": "Bharti Airtel",          "sector": "Telecom"},
+    "BHARTIARTL": {"name": "Bharti Airtel",          "sector": "Telecom",            "stooq": "bhartiartl.ns", "yf": "BHARTIARTL.NS"},
 }
 
 assert len(NIFTY50) == 50, f"NIFTY50 has {len(NIFTY50)} stocks -- expected exactly 50"
 
-THROTTLE_SECS = 0.4
+THROTTLE_SECS = 0.5
+PRICE_PERIOD  = "3y"   # for yfinance fallback
 
 
 # ---------------------------------------------------------------------------
-# NSE HTTP session
-# NSE requires browser-like headers + cookie handshake on first request.
+# Source 1: Stooq CSV
+# Simple GET, returns CSV, no auth, no cookies, no IP blocking.
+# URL: https://stooq.com/q/d/l/?s=SYMBOL&i=d  (d = daily)
 # ---------------------------------------------------------------------------
 
-NSE_BASE = "https://www.nseindia.com"
-
-_NSE_HEADERS = {
+_STOOQ_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/121.0.0.0 Safari/537.36"
-    ),
-    "Accept":          "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Referer":         "https://www.nseindia.com/",
-    "Connection":      "keep-alive",
+    )
 }
 
-_session = None
+_stooq_session = None
 
 
-def _get_session():
-    global _session
-    if _session is not None:
-        return _session
-    s = requests.Session()
-    s.headers.update(_NSE_HEADERS)
-    try:
-        r = s.get(NSE_BASE, timeout=15)
-        r.raise_for_status()
-        log.info(f"NSE cookie handshake OK ({len(s.cookies)} cookies)")
-    except Exception as e:
-        log.warning(f"NSE cookie handshake failed: {e} -- continuing anyway")
-    _session = s
-    return _session
+def _get_stooq_session():
+    global _stooq_session
+    if _stooq_session is None:
+        _stooq_session = requests.Session()
+        _stooq_session.headers.update(_STOOQ_HEADERS)
+    return _stooq_session
 
 
-def _nse_get(path, params=None, retries=3):
-    s = _get_session()
-    url = f"{NSE_BASE}{path}"
-    for attempt in range(1, retries + 1):
+def _fetch_prices_stooq(stooq_sym: str, label: str):
+    """
+    Fetch ~3y of daily close prices from Stooq.
+    Returns pd.Series or None.
+    """
+    s = _get_stooq_session()
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 60)
+
+    url = "https://stooq.com/q/d/l/"
+    params = {
+        "s":  stooq_sym,
+        "d1": start_dt.strftime("%Y%m%d"),
+        "d2": end_dt.strftime("%Y%m%d"),
+        "i":  "d",
+    }
+
+    for attempt in range(1, 4):
         try:
             r = s.get(url, params=params, timeout=20)
-            if r.status_code == 401:
-                log.debug("NSE 401 -- refreshing session cookies")
-                s.get(NSE_BASE, timeout=15)
-                r = s.get(url, params=params, timeout=20)
             r.raise_for_status()
-            return r.json()
+
+            text = r.text.strip()
+            # Stooq returns "No data" or similar for unknown symbols
+            if len(text) < 50 or "No data" in text or "<html" in text.lower():
+                log.debug(f"  {label} Stooq: no usable data in response")
+                return None
+
+            df = pd.read_csv(io.StringIO(text), parse_dates=["Date"])
+            if df.empty or "Close" not in df.columns:
+                return None
+
+            df = df.dropna(subset=["Date", "Close"]).sort_values("Date")
+            prices = df.set_index("Date")["Close"].astype(float)
+            prices.index.name = "Date"
+
+            if len(prices) >= 20:
+                log.info(f"  {label}: {len(prices)} rows via Stooq ✓")
+                return prices
+
         except Exception as e:
-            log.debug(f"NSE GET attempt {attempt} failed ({url}): {e}")
-            if attempt < retries:
+            log.debug(f"  {label} Stooq attempt {attempt}: {e}")
+            if attempt < 3:
                 time.sleep(2 ** attempt)
+
+    return None
+
+
+def _fetch_index_stooq():
+    """Fetch Nifty50 index history from Stooq (^nsei)."""
+    return _fetch_prices_stooq("^nsei", "Nifty50-index")
+
+
+# ---------------------------------------------------------------------------
+# Source 2: yfinance fallback
+# Works reliably at off-peak hours; kept as fallback.
+# ---------------------------------------------------------------------------
+
+def _fetch_prices_yf(yf_ticker: str, label: str):
+    try:
+        import yfinance as yf
+        hist = yf.Ticker(yf_ticker).history(
+            period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
+        )
+        if hist is not None and not hist.empty and len(hist) > 10:
+            prices = hist["Close"].squeeze()
+            log.info(f"  {label}: {len(prices)} rows via yfinance ✓")
+            return prices
+    except Exception as e:
+        log.debug(f"  {label} yfinance: {e}")
+    return None
+
+
+def _fetch_index_yf():
+    """Fetch Nifty50 index via yfinance fallback."""
+    try:
+        import yfinance as yf
+        hist = yf.Ticker("^NSEI").history(
+            period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
+        )
+        if hist is not None and not hist.empty:
+            return hist["Close"].squeeze()
+    except Exception as e:
+        log.debug(f"  Nifty50-index yfinance: {e}")
     return None
 
 
 # ---------------------------------------------------------------------------
-# Price history
+# Unified fetch with waterfall: Stooq -> yfinance
 # ---------------------------------------------------------------------------
 
-def _fetch_prices_nse(symbol, label):
-    end_dt   = datetime.today()
-    start_dt = end_dt - timedelta(days=3 * 365 + 30)
+def _fetch_prices(ticker: str, meta: dict) -> pd.Series | None:
+    stooq_sym = meta.get("stooq", f"{ticker.lower()}.ns")
+    yf_sym    = meta.get("yf",    f"{ticker}.NS")
 
-    params = {
-        "symbol": symbol,
-        "series": "EQ",
-        "from":   start_dt.strftime("%d-%m-%Y"),
-        "to":     end_dt.strftime("%d-%m-%Y"),
-    }
-    data = _nse_get("/api/historical/cm/equity", params=params)
+    prices = _fetch_prices_stooq(stooq_sym, ticker)
+    if prices is not None:
+        return prices
 
-    if not data:
-        log.warning(f"  {label}: NSE returned no data")
-        return None
-
-    rows = data.get("data", [])
-    if not rows:
-        log.warning(f"  {label}: empty data array")
-        return None
-
-    try:
-        df = pd.DataFrame(rows)
-        ts_col    = next((c for c in df.columns if "TIMESTAMP" in c.upper()), None)
-        close_col = next((c for c in df.columns if "CLOSING" in c.upper()), None)
-        if ts_col is None or close_col is None:
-            log.warning(f"  {label}: unexpected columns {list(df.columns)[:8]}")
-            return None
-
-        df[ts_col]    = pd.to_datetime(df[ts_col])
-        df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
-        df = df.dropna(subset=[ts_col, close_col]).sort_values(ts_col)
-        prices = df.set_index(ts_col)[close_col]
-        prices.index.name = "Date"
-        prices.name = symbol
-
-        log.info(f"  {label}: {len(prices)} rows from NSE")
-        return prices if len(prices) >= 20 else None
-
-    except Exception as e:
-        log.warning(f"  {label}: parse error -- {e}")
-        return None
+    log.debug(f"  {ticker}: Stooq failed, trying yfinance")
+    prices = _fetch_prices_yf(yf_sym, ticker)
+    return prices
 
 
-# ---------------------------------------------------------------------------
-# Nifty50 index history for beta / alpha
-# ---------------------------------------------------------------------------
-
-def _fetch_index_prices_nse():
-    end_dt   = datetime.today()
-    start_dt = end_dt - timedelta(days=3 * 365 + 30)
-
-    params = {
-        "indexType": "NIFTY 50",
-        "from":      start_dt.strftime("%d-%m-%Y"),
-        "to":        end_dt.strftime("%d-%m-%Y"),
-    }
-    data = _nse_get("/api/historical/indicesHistory", params=params)
-
-    if not data:
-        log.warning("  Nifty50 index: NSE returned no data")
-        return None
-
-    try:
-        records = (
-            data.get("data", {}).get("indexCloseOnlineRecords")
-            or data.get("data", [])
-        )
-        if not records:
-            log.warning("  Nifty50 index: empty records")
-            return None
-
-        df = pd.DataFrame(records)
-        ts_col  = next((c for c in df.columns if "TIMESTAMP" in c.upper()), None)
-        val_col = next((c for c in df.columns if "CLOSE" in c.upper()), None)
-        if ts_col is None or val_col is None:
-            log.warning(f"  Nifty50 index: unexpected columns {list(df.columns)[:8]}")
-            return None
-
-        df[ts_col]  = pd.to_datetime(df[ts_col])
-        df[val_col] = pd.to_numeric(df[val_col], errors="coerce")
-        df = df.dropna().sort_values(ts_col)
-        idx = df.set_index(ts_col)[val_col]
-        log.info(f"  Nifty50 index: {len(idx)} rows from NSE")
+def _fetch_index() -> pd.Series | None:
+    idx = _fetch_index_stooq()
+    if idx is not None:
         return idx
-
-    except Exception as e:
-        log.warning(f"  Nifty50 index parse error: {e}")
-        return None
+    log.debug("  Index: Stooq failed, trying yfinance")
+    return _fetch_index_yf()
 
 
 # ---------------------------------------------------------------------------
-# Fundamentals
-# ---------------------------------------------------------------------------
-
-def _fetch_fundamentals_nse(symbol):
-    data = _nse_get("/api/quote-equity", params={"symbol": symbol})
-    if not data:
-        return {}
-    try:
-        md = data.get("metadata",   {}) or {}
-        pi = data.get("priceInfo",  {}) or {}
-        return {
-            "pe":        round(float(md.get("pdSymbolPe", 0) or 0), 2),
-            "pb":        0.0,
-            "div_yield": 0.0,
-            "mkt_cap":   md.get("pdFfMktCapCr"),
-            "52w_high":  (pi.get("weekHighLow") or {}).get("max"),
-            "52w_low":   (pi.get("weekHighLow") or {}).get("min"),
-            "sector":    md.get("pdSectorPe", ""),
-            "industry":  "",
-        }
-    except Exception:
-        return {}
-
-
-# ---------------------------------------------------------------------------
-# Analytics
+# Analytics (unchanged)
 # ---------------------------------------------------------------------------
 
 def _compute_rsi(prices, period=14):
@@ -378,13 +347,13 @@ def harvest(tickers=None):
     run_id  = str(uuid.uuid4())[:8]
     started = datetime.utcnow()
     log.info(f"Harvest started -- run_id: {run_id}")
-    log.info("Data source: NSE India official API (no rate limits)")
+    log.info("Data source: Stooq (primary) -> yfinance (fallback)")
 
     universe = get_peer_tickers(tickers) if tickers else list(NIFTY50.keys())
     log.info(f"Universe: {len(universe)} stocks")
 
-    log.info("Fetching Nifty50 index from NSE...")
-    idx_prices = _fetch_index_prices_nse()
+    log.info("Fetching Nifty50 index...")
+    idx_prices = _fetch_index()
     idx_ret    = idx_prices.pct_change().dropna() if idx_prices is not None else None
     if idx_ret is None:
         log.warning("Could not fetch index -- beta/alpha will be None for all stocks")
@@ -398,10 +367,10 @@ def harvest(tickers=None):
         meta = NIFTY50.get(ticker, {})
         log.info(f"[{i}/{len(universe)}] {ticker}")
 
-        prices = _fetch_prices_nse(ticker, ticker)
+        prices = _fetch_prices(ticker, meta)
 
         if prices is None or len(prices) < 20:
-            log.warning(f"  {ticker}: insufficient data -- skipping")
+            log.warning(f"  {ticker}: no data from any source -- skipping")
             failed.append(ticker)
             time.sleep(THROTTLE_SECS)
             continue
@@ -440,8 +409,9 @@ def harvest(tickers=None):
             "harvested_at": datetime.utcnow().isoformat(),
         })
 
+        # Fundamentals: try yfinance (more detailed); graceful on failure
         if ticker not in fundamentals:
-            fundamentals[ticker] = _fetch_fundamentals_nse(ticker)
+            fundamentals[ticker] = _fetch_fundamentals(meta.get("yf", f"{ticker}.NS"))
 
         success += 1
         time.sleep(THROTTLE_SECS)
@@ -471,13 +441,30 @@ def harvest(tickers=None):
     return summary
 
 
+def _fetch_fundamentals(yf_sym: str) -> dict:
+    """PE, PB etc. from yfinance -- best-effort, returns {} on any error."""
+    try:
+        import yfinance as yf
+        info = yf.Ticker(yf_sym).info or {}
+        return {
+            "pe":        round(float(info.get("trailingPE",    0) or 0), 2),
+            "pb":        round(float(info.get("priceToBook",   0) or 0), 2),
+            "div_yield": round((info.get("dividendYield", 0) or 0) * 100, 2),
+            "mkt_cap":   info.get("marketCap"),
+            "52w_high":  info.get("fiftyTwoWeekHigh"),
+            "52w_low":   info.get("fiftyTwoWeekLow"),
+        }
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     log.info("=== Agent_Trader Harvest Runner ===")
-    log.info("Data source: NSE India official API")
+    log.info("Data: Stooq (primary) -> yfinance (fallback)")
 
     conn = gs.test_connection()
     for k, v in conn.items():

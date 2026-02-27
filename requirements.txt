@@ -1,10 +1,13 @@
 # Agent_Trader -- Avito stack
 # GitHub Actions + Streamlit Cloud
 
-# Data -- NSE India official API (no rate limits, no Yahoo dependency)
+# Data
+# Stooq is the primary source (plain HTTP CSV, no IP blocking)
+# yfinance is the fallback (works at off-peak hours)
 pandas==2.2.3
 numpy==1.26.4
 requests==2.32.3
+yfinance==0.2.54
 
 # Encryption + GitHub API
 cryptography==42.0.8

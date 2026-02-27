@@ -1,9 +1,10 @@
 name: Agent_Trader Harvest
 
 on:
-  # Daily Mon-Fri at 07:00 IST (01:30 UTC)
+  # Daily Mon-Fri at midnight IST = 18:30 UTC (post market-close, low traffic)
+  # Primary: Stooq (no IP blocking), Fallback: yfinance (reliable at low-traffic hours)
   schedule:
-    - cron: "30 1 * * 1-5"
+    - cron: "30 18 * * 1-5"
 
   # Fires when Streamlit writes a new holdings_trigger.enc (user uploads Excel)
   push:
@@ -21,16 +22,16 @@ on:
         default: "auto"
         type: choice
         options:
-          - auto        # reads holdings_trigger.enc if present, else full harvest
-          - full        # force full Nifty50 harvest regardless of trigger
+          - auto
+          - full
 
 permissions:
-  contents: write       # needed to commit db/*.enc files back to repo
+  contents: write
 
 jobs:
   harvest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30   # kill if hung
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repo
