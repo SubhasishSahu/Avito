@@ -178,62 +178,71 @@ BSE_SCRIP   = "500180"   # HDFCBANK BSE scrip code
 end_dt      = datetime.today()
 start_dt    = end_dt - timedelta(days=30)
 
-# ── 4a. BSE India direct API ─────────────────────────────────────
-print("  [BSE India direct API]")
+# ── 4a. BSE India (with session cookie handshake) ────────────────
+print("  [BSE India API -- with session handshake]")
 try:
     bse_sess = requests.Session()
     bse_sess.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer":    "https://www.bseindia.com",
-        "Accept":     "application/json, text/plain, */*",
-        "Origin":     "https://www.bseindia.com",
+        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection":      "keep-alive",
     })
-    r = bse_sess.get(
-        "https://api.bseindia.com/BseIndiaAPI/api/StockReachGraph/w",
-        params={"scripcode": BSE_SCRIP, "flag": "1",
-                "fromdate": start_dt.strftime("%Y%m%d"),
-                "todate":   end_dt.strftime("%Y%m%d"),
-                "seriesid": "EQ"},
-        timeout=15)
-    print(f"    HTTP {r.status_code} | Server: {r.headers.get('Server','?')[:30]} | CF-Ray: {r.headers.get('CF-Ray','none')}")
-    print(f"    Body[:200]: {r.text[:200].replace(chr(10),' ')}")
-    if r.status_code == 200:
-        try:
+
+    # Step 1: cookie handshake
+    print("    Step 1: GET www.bseindia.com (establish ASP.NET session cookies)")
+    r0 = bse_sess.get("https://www.bseindia.com", timeout=15)
+    cf0 = r0.headers.get("CF-Ray", "none")
+    cookies_got = list(bse_sess.cookies.keys())
+    print(f"    Handshake: HTTP {r0.status_code} | CF-Ray: {cf0} | cookies: {cookies_got}")
+
+    if cf0 != "none" and r0.status_code in (403, 503):
+        record("BSE India API", False,
+               f"www.bseindia.com has Cloudflare and is blocking this IP (CF-Ray: {cf0})",
+               "BSE main site is Cloudflare-protected. Try a different BSE endpoint or accept yfinance-only.")
+    elif r0.status_code != 200:
+        record("BSE India API", False,
+               f"Handshake failed: HTTP {r0.status_code}",
+               "Cannot establish BSE session without accessing www.bseindia.com")
+    else:
+        # Step 2: call historical data API with session cookies
+        bse_sess.headers.update({
+            "Accept":  "application/json, text/plain, */*",
+            "Referer": "https://www.bseindia.com/",
+            "Origin":  "https://www.bseindia.com",
+        })
+        print("    Step 2: GET api.bseindia.com/StockReachGraph (historical data)")
+        r = bse_sess.get(
+            "https://api.bseindia.com/BseIndiaAPI/api/StockReachGraph/w",
+            params={"scripcode": BSE_SCRIP, "flag": "1",
+                    "fromdate": start_dt.strftime("%Y%m%d"),
+                    "todate":   end_dt.strftime("%Y%m%d"),
+                    "seriesid": "EQ"},
+            timeout=15)
+        print(f"    API: HTTP {r.status_code} | CF-Ray: {r.headers.get('CF-Ray','none')} | Content-Type: {r.headers.get('Content-Type','?')[:40]}")
+        print(f"    Body[:150]: {r.text[:150].replace(chr(10),' ')}")
+
+        if r.status_code == 200 and r.text.strip().startswith("{"):
             data = r.json()
             rows = data.get("Data") or data.get("data") or []
             if rows:
-                record("BSE India API", True, f"{len(rows)} data points for HDFCBANK (scrip {BSE_SCRIP})")
+                record("BSE India API", True,
+                       f"{len(rows)} data points for HDFCBANK (scrip {BSE_SCRIP}) ✓ SESSION HANDSHAKE WORKS")
             else:
                 record("BSE India API", False,
-                       f"HTTP 200 but empty. Keys: {list(data.keys())}",
-                       "BSE API structure may have changed -- check bseindia.com network tab")
-        except Exception as je:
-            record("BSE India API", False, f"JSON parse error: {je} | body: {r.text[:100]}")
-    elif r.status_code == 403:
-        record("BSE India API", False, "403 Forbidden",
-               "Add stronger Referer/Origin headers or test jugaad-trader wrapper")
-    else:
-        record("BSE India API", False, f"HTTP {r.status_code}: {r.text[:150]}")
+                       f"HTTP 200 JSON but empty data. Keys: {list(data.keys())}",
+                       "Try different date range or check BSE API structure has changed")
+        elif r.status_code == 200 and "<html" in r.text.lower():
+            record("BSE India API", False,
+                   "Still getting HTML after handshake -- session cookies may have expired or wrong endpoint",
+                   "Inspect www.bseindia.com Network tab for the correct API path and required cookies")
+        else:
+            record("BSE India API", False,
+                   f"HTTP {r.status_code}: {r.text[:150]}")
 except Exception as e:
     record("BSE India API", False, f"{type(e).__name__}: {e}",
-           "Network-level block. BSE API may not be reachable from GitHub Actions IPs.")
-
-# ── 4b. jugaad-trader (BSE Python wrapper) ───────────────────────
-print()
-print("  [jugaad-trader]")
-try:
-    from jugaad_trader.stockdata import StockDataBse
-    df = StockDataBse.stock_data_raw(BSE_SCRIP, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
-    if df is not None and not df.empty:
-        record("jugaad-trader", True, f"{len(df)} rows for HDFCBANK")
-    else:
-        record("jugaad-trader", False, "Empty response",
-               "jugaad-trader wraps the same BSE API -- if BSE API fails, this will too")
-except ImportError:
-    record("jugaad-trader", False, "Not installed",
-           "Add jugaad-trader==0.2.17 to requirements.txt")
-except Exception as e:
-    record("jugaad-trader", False, f"{type(e).__name__}: {e}")
+           "Network error reaching bseindia.com from GitHub Actions IPs")
 
 # ── 4c. Stooq ────────────────────────────────────────────────────
 print()

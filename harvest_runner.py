@@ -528,9 +528,9 @@ def _rotating_get(url: str, params: dict, label: str, timeout: int = 20):
 # BSE India serves historical data from their own API (used by bseindia.com).
 # No API key required. No Cloudflare. Datacenter IPs are not blocked.
 #
-# Two approaches tried in order:
-#   A. jugaad_trader package  -- clean Python wrapper around BSE's API
-#   B. BSE raw HTTP API       -- direct call to api.bseindia.com
+# Approach: session cookie handshake then BSE raw HTTP API
+#   Step 1: GET www.bseindia.com  -- establishes ASP.NET session cookies
+#   Step 2: GET api.bseindia.com  -- now returns JSON (not HTML error page)
 #
 # Symbol mapping: NSE ticker -> BSE scrip code (6-digit number)
 # ---------------------------------------------------------------------------
@@ -566,27 +566,67 @@ _BSE_SCRIP = {
     "TATATECH": "544028", "TRITURBINE": "533655",
 }
 
-_bse_session = None
+_bse_session       = None
+_bse_session_ready = False   # True once cookie handshake succeeded
 
 
-def _get_bse_session() -> requests.Session:
-    global _bse_session
-    if _bse_session is None:
-        _bse_session = requests.Session()
-        _bse_session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer":    "https://www.bseindia.com",
-            "Accept":     "application/json, text/plain, */*",
-            "Origin":     "https://www.bseindia.com",
-        })
-    return _bse_session
+def _get_bse_session() -> "requests.Session | None":
+    """
+    Returns a requests.Session with valid BSE ASP.NET cookies.
+    
+    BSE's API (api.bseindia.com) returns an ASP.NET HTML error page unless
+    the session carries cookies from www.bseindia.com. This function performs
+    the one-time cookie handshake and caches the session for the harvest run.
+    
+    No Cloudflare on either www.bseindia.com or api.bseindia.com (confirmed:
+    CF-Ray header absent). Session establishment succeeds from datacenter IPs.
+    """
+    global _bse_session, _bse_session_ready
+    if _bse_session_ready:
+        return _bse_session
+
+    sess = requests.Session()
+    sess.headers.update({
+        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection":      "keep-alive",
+    })
+
+    try:
+        # Step 1: hit the main BSE website to establish ASP.NET session cookies
+        r = sess.get("https://www.bseindia.com", timeout=15)
+        cf_ray = r.headers.get("CF-Ray", "none")
+        if cf_ray != "none":
+            log.warning(f"BSE main page has Cloudflare (CF-Ray: {cf_ray}) -- may block datacenter IPs")
+        if r.status_code == 200:
+            cookies = {c.name: c.value for c in sess.cookies}
+            log.info(f"BSE session: handshake OK (HTTP 200, {len(cookies)} cookies: {list(cookies.keys())[:5]})")
+            # Switch to API-friendly headers after handshake
+            sess.headers.update({
+                "Accept":  "application/json, text/plain, */*",
+                "Referer": "https://www.bseindia.com/",
+                "Origin":  "https://www.bseindia.com",
+            })
+            _bse_session       = sess
+            _bse_session_ready = True
+            return sess
+        else:
+            log.warning(f"BSE handshake: HTTP {r.status_code} -- session not established")
+            return None
+    except Exception as e:
+        log.warning(f"BSE handshake failed: {type(e).__name__}: {e}")
+        return None
 
 
 def _fetch_prices_bse(nse_symbol: str, label: str) -> "pd.Series | None":
     """
     Fetch historical close prices from BSE India's public API.
-    Uses BSE scrip codes mapped from NSE ticker symbols.
-    No API key required. No IP blocking observed from datacenter IPs.
+    
+    Performs a one-time cookie handshake (GET www.bseindia.com) to establish
+    an ASP.NET session, then calls the historical chart API.
+    No API key. No Cloudflare. Works from datacenter IPs.
     """
     scrip = _BSE_SCRIP.get(nse_symbol.upper())
     if not scrip:
@@ -596,25 +636,11 @@ def _fetch_prices_bse(nse_symbol: str, label: str) -> "pd.Series | None":
     end_dt   = datetime.today()
     start_dt = end_dt - timedelta(days=3 * 365 + 60)
 
-    # Try jugaad-trader first (cleaner interface)
-    try:
-        from jugaad_trader.stockdata import StockDataBse
-        df = StockDataBse.stock_data_raw(
-            scrip, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d")
-        )
-        if df is not None and not df.empty and "CLOSE" in df.columns:
-            prices = df.set_index("DATE")["CLOSE"].astype(float).sort_index()
-            prices.index = pd.to_datetime(prices.index)
-            prices.index.name = "Date"
-            if len(prices) >= 20:
-                log.info(f"  {label}: {len(prices)} rows via BSE/jugaad ✓")
-                return prices
-    except Exception as e:
-        log.debug(f"  {label} BSE/jugaad: {type(e).__name__}: {e}")
-
-    # Fallback: BSE raw HTTP API
     try:
         sess = _get_bse_session()
+        if sess is None:
+            log.debug(f"  {label}: BSE session unavailable")
+            return None
         url  = "https://api.bseindia.com/BseIndiaAPI/api/StockReachGraph/w"
         params = {
             "scripcode": scrip,
