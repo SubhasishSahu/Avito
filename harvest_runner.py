@@ -570,6 +570,19 @@ _bse_session       = None
 _bse_session_ready = False   # True once cookie handshake succeeded
 
 
+def _strip_tz(prices: pd.Series) -> pd.Series:
+    """Strip timezone from a Series DatetimeIndex. Always returns tz-naive.
+
+    yfinance daily data uses date-only IST timestamps (e.g. 2026-02-27 00:00+05:30).
+    tz_convert(None) would shift to UTC and corrupt dates (2026-02-26 18:30).
+    tz_localize(None) drops the tz label without any value shift -- correct.
+    """
+    if prices.index.tz is not None:
+        prices = prices.copy()
+        prices.index = prices.index.tz_localize(None)
+    return prices
+
+
 def _get_bse_session() -> "requests.Session | None":
     """
     Returns a requests.Session with valid BSE ASP.NET cookies.
@@ -960,7 +973,7 @@ def _fetch_prices_yf(yf_ticker: str, label: str) -> pd.Series | None:
             period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
         )
         if hist is not None and not hist.empty and len(hist) > 10:
-            prices = hist["Close"].squeeze()
+            prices = _strip_tz(hist["Close"].squeeze())
             log.info(f"  {label}: {len(prices)} rows via yfinance ✓")
             return prices
     except Exception as e:
@@ -975,7 +988,7 @@ def _fetch_index_yf() -> pd.Series | None:
             period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
         )
         if hist is not None and not hist.empty:
-            return hist["Close"].squeeze()
+            return _strip_tz(hist["Close"].squeeze())
     except Exception as e:
         log.debug(f"  Nifty50-index yfinance: {e}")
     return None
@@ -1112,6 +1125,11 @@ def _compute_macd(prices):
 
 
 def _compute_beta(stock_ret, idx_ret):
+    # Normalise both to tz-naive -- different sources may produce mismatched tz
+    if stock_ret.index.tz is not None:
+        stock_ret = stock_ret.copy(); stock_ret.index = stock_ret.index.tz_localize(None)
+    if idx_ret.index.tz is not None:
+        idx_ret = idx_ret.copy(); idx_ret.index = idx_ret.index.tz_localize(None)
     aligned = pd.concat([stock_ret, idx_ret], axis=1).dropna()
     if len(aligned) < 30:
         return None
