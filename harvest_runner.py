@@ -1,24 +1,18 @@
 """
-Agent_Trader – Harvest Runner
-Fetches yfinance data for user holdings + Nifty50 sector peers.
-Computes analytics: beta, RSI, MACD, CAGR, VaR, alpha.
-Encrypts and writes to GitHub db/ folder.
+Agent_Trader -- Harvest Runner
+Data source: NSE India official APIs (nseindia.com)
+  - Price history  : /api/historical/cm/equity?symbol=X&series=EQ&from=&to=
+  - Quote/fundam.  : /api/quote-equity?symbol=X
+  - Index history  : /api/historical/indicesHistory?indexType=NIFTY+50&from=&to=
 
-Fixes applied:
-BUG_1  shared_session used before creation -> moved before index fetch
-BUG_2  WIPRO duplicated -> removed, LTIM added as 50th
-BUG_3  _fetch_fundamentals had no session -> fixed
-BUG_4  timedelta imported but unused -> removed
-BUG_5  get_peer_tickers had unused import time -> removed
-BUG_6  zero-stock harvest exited 0 -> explicit sys.exit(1)
-BUG_7  51 stocks (SHRIRAMFIN duplicate) -> removed, exactly 50
-BUG_8  Yahoo TLS fingerprinting blocks GitHub Actions -> curl_cffi added
-BUG_9  curl_cffi session passed to yf.Ticker() crashes yfinance -> FIXED
-Root cause: yfinance auto-detects curl_cffi when installed.
-Passing curl_cffi.Session as session= param causes AttributeError
-inside yfinance before any HTTP request is made.
-Fix: remove all session= params. Just having curl_cffi in
-requirements.txt is sufficient – yfinance uses it automatically.
+No API key required. NSE does not block cloud/datacenter IP ranges.
+
+Analytics computed locally: RSI, MACD, Beta, CAGR, VaR, Alpha, Max Drawdown.
+
+Fix history:
+  BUG_1-9  (see previous comments -- yfinance/curl_cffi stack)
+  BUG_10   yfinance rate-limited at IP level on GitHub Actions
+           -> switched to NSE India official API, no rate limit
 """
 import os
 import sys
@@ -26,11 +20,11 @@ import logging
 import warnings
 import uuid
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import numpy as np
-import yfinance as yf
+import requests
 
 import github_store as gs
 
@@ -41,83 +35,262 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
-logging.getLogger("yfinance").setLevel(logging.ERROR)
-logging.getLogger("urllib3").setLevel(logging.ERROR)
 
-# – Nifty50 Universe: exactly 50 unique stocks, sector-mapped –
 
+# ---------------------------------------------------------------------------
+# Nifty50 Universe: exactly 50 unique stocks, sector-mapped
+# ---------------------------------------------------------------------------
 NIFTY50 = {
-    # Financial Services – 10
-    "HDFCBANK":   {"name": "HDFC Bank",              "sector": "Financial Services", "yf": "HDFCBANK.NS"},
-    "ICICIBANK":  {"name": "ICICI Bank",             "sector": "Financial Services", "yf": "ICICIBANK.NS"},
-    "KOTAKBANK":  {"name": "Kotak Mahindra Bank",    "sector": "Financial Services", "yf": "KOTAKBANK.NS"},
-    "AXISBANK":   {"name": "Axis Bank",              "sector": "Financial Services", "yf": "AXISBANK.NS"},
-    "SBIN":       {"name": "State Bank of India",    "sector": "Financial Services", "yf": "SBIN.NS"},
-    "BAJFINANCE": {"name": "Bajaj Finance",          "sector": "Financial Services", "yf": "BAJFINANCE.NS"},
-    "BAJAJFINSV": {"name": "Bajaj Finserv",          "sector": "Financial Services", "yf": "BAJAJFINSV.NS"},
-    "HDFCLIFE":   {"name": "HDFC Life Insurance",    "sector": "Financial Services", "yf": "HDFCLIFE.NS"},
-    "SBILIFE":    {"name": "SBI Life Insurance",     "sector": "Financial Services", "yf": "SBILIFE.NS"},
-    "INDUSINDBK": {"name": "IndusInd Bank",          "sector": "Financial Services", "yf": "INDUSINDBK.NS"},
-    # IT – 6
-    "TCS":        {"name": "Tata Consultancy",       "sector": "IT",                 "yf": "TCS.NS"},
-    "INFY":       {"name": "Infosys",                "sector": "IT",                 "yf": "INFY.NS"},
-    "HCLTECH":    {"name": "HCL Technologies",       "sector": "IT",                 "yf": "HCLTECH.NS"},
-    "WIPRO":      {"name": "Wipro",                  "sector": "IT",                 "yf": "WIPRO.NS"},
-    "TECHM":      {"name": "Tech Mahindra",          "sector": "IT",                 "yf": "TECHM.NS"},
-    "LTIM":       {"name": "LTIMindtree",            "sector": "IT",                 "yf": "LTIM.NS"},
-    # Oil & Gas – 6
-    "RELIANCE":   {"name": "Reliance Industries",    "sector": "Oil & Gas",          "yf": "RELIANCE.NS"},
-    "ONGC":       {"name": "ONGC",                   "sector": "Oil & Gas",          "yf": "ONGC.NS"},
-    "BPCL":       {"name": "BPCL",                   "sector": "Oil & Gas",          "yf": "BPCL.NS"},
-    "COALINDIA":  {"name": "Coal India",             "sector": "Oil & Gas",          "yf": "COALINDIA.NS"},
-    "POWERGRID":  {"name": "Power Grid Corp",        "sector": "Oil & Gas",          "yf": "POWERGRID.NS"},
-    "NTPC":       {"name": "NTPC",                   "sector": "Oil & Gas",          "yf": "NTPC.NS"},
-    # Consumer – 8
-    "HINDUNILVR": {"name": "Hindustan Unilever",     "sector": "Consumer",           "yf": "HINDUNILVR.NS"},
-    "ITC":        {"name": "ITC",                    "sector": "Consumer",           "yf": "ITC.NS"},
-    "NESTLEIND":  {"name": "Nestle India",           "sector": "Consumer",           "yf": "NESTLEIND.NS"},
-    "BRITANNIA":  {"name": "Britannia Industries",   "sector": "Consumer",           "yf": "BRITANNIA.NS"},
-    "TATACONSUM": {"name": "Tata Consumer Products", "sector": "Consumer",           "yf": "TATACONSUM.NS"},
-    "TITAN":      {"name": "Titan Company",          "sector": "Consumer",           "yf": "TITAN.NS"},
-    "ASIANPAINT": {"name": "Asian Paints",           "sector": "Consumer",           "yf": "ASIANPAINT.NS"},
-    "ZOMATO":     {"name": "Zomato",                 "sector": "Consumer",           "yf": "ZOMATO.NS"},
-    # Auto – 6
-    "MARUTI":     {"name": "Maruti Suzuki",          "sector": "Auto",               "yf": "MARUTI.NS"},
-    "BAJAJ-AUTO": {"name": "Bajaj Auto",             "sector": "Auto",               "yf": "BAJAJ-AUTO.NS"},
-    "HEROMOTOCO": {"name": "Hero MotoCorp",          "sector": "Auto",               "yf": "HEROMOTOCO.NS"},
-    "EICHERMOT":  {"name": "Eicher Motors",          "sector": "Auto",               "yf": "EICHERMOT.NS"},
-    "M&M":        {"name": "Mahindra & Mahindra",    "sector": "Auto",               "yf": "M&M.NS"},
-    "TATAMOTORS": {"name": "Tata Motors",            "sector": "Auto",               "yf": "TATAMOTORS.NS"},
-    # Pharma – 5
-    "SUNPHARMA":  {"name": "Sun Pharmaceutical",     "sector": "Pharma",             "yf": "SUNPHARMA.NS"},
-    "DRREDDY":    {"name": "Dr Reddys Labs",         "sector": "Pharma",             "yf": "DRREDDY.NS"},
-    "CIPLA":      {"name": "Cipla",                  "sector": "Pharma",             "yf": "CIPLA.NS"},
-    "DIVISLAB":   {"name": "Divis Laboratories",     "sector": "Pharma",             "yf": "DIVISLAB.NS"},
-    "APOLLOHOSP": {"name": "Apollo Hospitals",       "sector": "Pharma",             "yf": "APOLLOHOSP.NS"},
-    # Metals – 4
-    "TATASTEEL":  {"name": "Tata Steel",             "sector": "Metals",             "yf": "TATASTEEL.NS"},
-    "JSWSTEEL":   {"name": "JSW Steel",              "sector": "Metals",             "yf": "JSWSTEEL.NS"},
-    "HINDALCO":   {"name": "Hindalco Industries",    "sector": "Metals",             "yf": "HINDALCO.NS"},
-    "ADANIENT":   {"name": "Adani Enterprises",      "sector": "Metals",             "yf": "ADANIENT.NS"},
-    # Infrastructure – 2
-    "LT":         {"name": "Larsen and Toubro",      "sector": "Infrastructure",     "yf": "LT.NS"},
-    "ADANIPORTS": {"name": "Adani Ports",            "sector": "Infrastructure",     "yf": "ADANIPORTS.NS"},
-    # Cement – 2
-    "ULTRACEMCO": {"name": "UltraTech Cement",       "sector": "Cement",             "yf": "ULTRACEMCO.NS"},
-    "GRASIM":     {"name": "Grasim Industries",      "sector": "Cement",             "yf": "GRASIM.NS"},
-    # Telecom – 1
-    "BHARTIARTL": {"name": "Bharti Airtel",          "sector": "Telecom",            "yf": "BHARTIARTL.NS"},
+    # Financial Services -- 10
+    "HDFCBANK":   {"name": "HDFC Bank",              "sector": "Financial Services"},
+    "ICICIBANK":  {"name": "ICICI Bank",             "sector": "Financial Services"},
+    "KOTAKBANK":  {"name": "Kotak Mahindra Bank",    "sector": "Financial Services"},
+    "AXISBANK":   {"name": "Axis Bank",              "sector": "Financial Services"},
+    "SBIN":       {"name": "State Bank of India",    "sector": "Financial Services"},
+    "BAJFINANCE": {"name": "Bajaj Finance",          "sector": "Financial Services"},
+    "BAJAJFINSV": {"name": "Bajaj Finserv",          "sector": "Financial Services"},
+    "HDFCLIFE":   {"name": "HDFC Life Insurance",    "sector": "Financial Services"},
+    "SBILIFE":    {"name": "SBI Life Insurance",     "sector": "Financial Services"},
+    "INDUSINDBK": {"name": "IndusInd Bank",          "sector": "Financial Services"},
+    # IT -- 6
+    "TCS":        {"name": "Tata Consultancy",       "sector": "IT"},
+    "INFY":       {"name": "Infosys",                "sector": "IT"},
+    "HCLTECH":    {"name": "HCL Technologies",       "sector": "IT"},
+    "WIPRO":      {"name": "Wipro",                  "sector": "IT"},
+    "TECHM":      {"name": "Tech Mahindra",          "sector": "IT"},
+    "LTIM":       {"name": "LTIMindtree",            "sector": "IT"},
+    # Oil & Gas -- 6
+    "RELIANCE":   {"name": "Reliance Industries",    "sector": "Oil & Gas"},
+    "ONGC":       {"name": "ONGC",                   "sector": "Oil & Gas"},
+    "BPCL":       {"name": "BPCL",                   "sector": "Oil & Gas"},
+    "COALINDIA":  {"name": "Coal India",             "sector": "Oil & Gas"},
+    "POWERGRID":  {"name": "Power Grid Corp",        "sector": "Oil & Gas"},
+    "NTPC":       {"name": "NTPC",                   "sector": "Oil & Gas"},
+    # Consumer -- 8
+    "HINDUNILVR": {"name": "Hindustan Unilever",     "sector": "Consumer"},
+    "ITC":        {"name": "ITC",                    "sector": "Consumer"},
+    "NESTLEIND":  {"name": "Nestle India",           "sector": "Consumer"},
+    "BRITANNIA":  {"name": "Britannia Industries",   "sector": "Consumer"},
+    "TATACONSUM": {"name": "Tata Consumer Products", "sector": "Consumer"},
+    "TITAN":      {"name": "Titan Company",          "sector": "Consumer"},
+    "ASIANPAINT": {"name": "Asian Paints",           "sector": "Consumer"},
+    "ZOMATO":     {"name": "Zomato",                 "sector": "Consumer"},
+    # Auto -- 6
+    "MARUTI":     {"name": "Maruti Suzuki",          "sector": "Auto"},
+    "BAJAJ-AUTO": {"name": "Bajaj Auto",             "sector": "Auto"},
+    "HEROMOTOCO": {"name": "Hero MotoCorp",          "sector": "Auto"},
+    "EICHERMOT":  {"name": "Eicher Motors",          "sector": "Auto"},
+    "M&M":        {"name": "Mahindra & Mahindra",    "sector": "Auto"},
+    "TATAMOTORS": {"name": "Tata Motors",            "sector": "Auto"},
+    # Pharma -- 5
+    "SUNPHARMA":  {"name": "Sun Pharmaceutical",     "sector": "Pharma"},
+    "DRREDDY":    {"name": "Dr Reddys Labs",         "sector": "Pharma"},
+    "CIPLA":      {"name": "Cipla",                  "sector": "Pharma"},
+    "DIVISLAB":   {"name": "Divis Laboratories",     "sector": "Pharma"},
+    "APOLLOHOSP": {"name": "Apollo Hospitals",       "sector": "Pharma"},
+    # Metals -- 4
+    "TATASTEEL":  {"name": "Tata Steel",             "sector": "Metals"},
+    "JSWSTEEL":   {"name": "JSW Steel",              "sector": "Metals"},
+    "HINDALCO":   {"name": "Hindalco Industries",    "sector": "Metals"},
+    "ADANIENT":   {"name": "Adani Enterprises",      "sector": "Metals"},
+    # Infrastructure -- 2
+    "LT":         {"name": "Larsen and Toubro",      "sector": "Infrastructure"},
+    "ADANIPORTS": {"name": "Adani Ports",            "sector": "Infrastructure"},
+    # Cement -- 2
+    "ULTRACEMCO": {"name": "UltraTech Cement",       "sector": "Cement"},
+    "GRASIM":     {"name": "Grasim Industries",      "sector": "Cement"},
+    # Telecom -- 1
+    "BHARTIARTL": {"name": "Bharti Airtel",          "sector": "Telecom"},
 }
 
-assert len(NIFTY50) == 50, f"NIFTY50 has {len(NIFTY50)} stocks – expected exactly 50"
+assert len(NIFTY50) == 50, f"NIFTY50 has {len(NIFTY50)} stocks -- expected exactly 50"
 
-NIFTY50_INDEX_YF = "^NSEI"
-PRICE_PERIOD     = "3y"
-THROTTLE_SECS    = 1.0
+THROTTLE_SECS = 0.4
 
-# – Analytics –
 
-def _compute_rsi(prices: pd.Series, period: int = 14):
+# ---------------------------------------------------------------------------
+# NSE HTTP session
+# NSE requires browser-like headers + cookie handshake on first request.
+# ---------------------------------------------------------------------------
+
+NSE_BASE = "https://www.nseindia.com"
+
+_NSE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.0.0 Safari/537.36"
+    ),
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer":         "https://www.nseindia.com/",
+    "Connection":      "keep-alive",
+}
+
+_session = None
+
+
+def _get_session():
+    global _session
+    if _session is not None:
+        return _session
+    s = requests.Session()
+    s.headers.update(_NSE_HEADERS)
+    try:
+        r = s.get(NSE_BASE, timeout=15)
+        r.raise_for_status()
+        log.info(f"NSE cookie handshake OK ({len(s.cookies)} cookies)")
+    except Exception as e:
+        log.warning(f"NSE cookie handshake failed: {e} -- continuing anyway")
+    _session = s
+    return _session
+
+
+def _nse_get(path, params=None, retries=3):
+    s = _get_session()
+    url = f"{NSE_BASE}{path}"
+    for attempt in range(1, retries + 1):
+        try:
+            r = s.get(url, params=params, timeout=20)
+            if r.status_code == 401:
+                log.debug("NSE 401 -- refreshing session cookies")
+                s.get(NSE_BASE, timeout=15)
+                r = s.get(url, params=params, timeout=20)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            log.debug(f"NSE GET attempt {attempt} failed ({url}): {e}")
+            if attempt < retries:
+                time.sleep(2 ** attempt)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Price history
+# ---------------------------------------------------------------------------
+
+def _fetch_prices_nse(symbol, label):
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 30)
+
+    params = {
+        "symbol": symbol,
+        "series": "EQ",
+        "from":   start_dt.strftime("%d-%m-%Y"),
+        "to":     end_dt.strftime("%d-%m-%Y"),
+    }
+    data = _nse_get("/api/historical/cm/equity", params=params)
+
+    if not data:
+        log.warning(f"  {label}: NSE returned no data")
+        return None
+
+    rows = data.get("data", [])
+    if not rows:
+        log.warning(f"  {label}: empty data array")
+        return None
+
+    try:
+        df = pd.DataFrame(rows)
+        ts_col    = next((c for c in df.columns if "TIMESTAMP" in c.upper()), None)
+        close_col = next((c for c in df.columns if "CLOSING" in c.upper()), None)
+        if ts_col is None or close_col is None:
+            log.warning(f"  {label}: unexpected columns {list(df.columns)[:8]}")
+            return None
+
+        df[ts_col]    = pd.to_datetime(df[ts_col])
+        df[close_col] = pd.to_numeric(df[close_col], errors="coerce")
+        df = df.dropna(subset=[ts_col, close_col]).sort_values(ts_col)
+        prices = df.set_index(ts_col)[close_col]
+        prices.index.name = "Date"
+        prices.name = symbol
+
+        log.info(f"  {label}: {len(prices)} rows from NSE")
+        return prices if len(prices) >= 20 else None
+
+    except Exception as e:
+        log.warning(f"  {label}: parse error -- {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Nifty50 index history for beta / alpha
+# ---------------------------------------------------------------------------
+
+def _fetch_index_prices_nse():
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 30)
+
+    params = {
+        "indexType": "NIFTY 50",
+        "from":      start_dt.strftime("%d-%m-%Y"),
+        "to":        end_dt.strftime("%d-%m-%Y"),
+    }
+    data = _nse_get("/api/historical/indicesHistory", params=params)
+
+    if not data:
+        log.warning("  Nifty50 index: NSE returned no data")
+        return None
+
+    try:
+        records = (
+            data.get("data", {}).get("indexCloseOnlineRecords")
+            or data.get("data", [])
+        )
+        if not records:
+            log.warning("  Nifty50 index: empty records")
+            return None
+
+        df = pd.DataFrame(records)
+        ts_col  = next((c for c in df.columns if "TIMESTAMP" in c.upper()), None)
+        val_col = next((c for c in df.columns if "CLOSE" in c.upper()), None)
+        if ts_col is None or val_col is None:
+            log.warning(f"  Nifty50 index: unexpected columns {list(df.columns)[:8]}")
+            return None
+
+        df[ts_col]  = pd.to_datetime(df[ts_col])
+        df[val_col] = pd.to_numeric(df[val_col], errors="coerce")
+        df = df.dropna().sort_values(ts_col)
+        idx = df.set_index(ts_col)[val_col]
+        log.info(f"  Nifty50 index: {len(idx)} rows from NSE")
+        return idx
+
+    except Exception as e:
+        log.warning(f"  Nifty50 index parse error: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Fundamentals
+# ---------------------------------------------------------------------------
+
+def _fetch_fundamentals_nse(symbol):
+    data = _nse_get("/api/quote-equity", params={"symbol": symbol})
+    if not data:
+        return {}
+    try:
+        md = data.get("metadata",   {}) or {}
+        pi = data.get("priceInfo",  {}) or {}
+        return {
+            "pe":        round(float(md.get("pdSymbolPe", 0) or 0), 2),
+            "pb":        0.0,
+            "div_yield": 0.0,
+            "mkt_cap":   md.get("pdFfMktCapCr"),
+            "52w_high":  (pi.get("weekHighLow") or {}).get("max"),
+            "52w_low":   (pi.get("weekHighLow") or {}).get("min"),
+            "sector":    md.get("pdSectorPe", ""),
+            "industry":  "",
+        }
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+
+def _compute_rsi(prices, period=14):
     if len(prices) < period + 1:
         return None
     delta = prices.diff()
@@ -128,7 +301,8 @@ def _compute_rsi(prices: pd.Series, period: int = 14):
     val   = rsi.iloc[-1]
     return round(float(val), 2) if not np.isnan(val) else None
 
-def _compute_macd(prices: pd.Series):
+
+def _compute_macd(prices):
     if len(prices) < 26:
         return None
     ema12  = prices.ewm(span=12, adjust=False).mean()
@@ -140,7 +314,8 @@ def _compute_macd(prices: pd.Series):
         return None
     return "bullish" if lm > ls else "bearish"
 
-def _compute_beta(stock_ret: pd.Series, idx_ret: pd.Series):
+
+def _compute_beta(stock_ret, idx_ret):
     aligned = pd.concat([stock_ret, idx_ret], axis=1).dropna()
     if len(aligned) < 30:
         return None
@@ -148,7 +323,8 @@ def _compute_beta(stock_ret: pd.Series, idx_ret: pd.Series):
     var = aligned.iloc[:, 1].var()
     return round(float(cov.iloc[0, 1] / var), 3) if var else None
 
-def _compute_cagr(prices: pd.Series, years: int = 3):
+
+def _compute_cagr(prices, years=3):
     days = years * 252
     if len(prices) < days * 0.8:
         return None
@@ -158,82 +334,34 @@ def _compute_cagr(prices: pd.Series, years: int = 3):
         return None
     return round(float(((end / start) ** (1 / (min(len(prices), days) / 252)) - 1) * 100), 2)
 
-def _compute_var(returns: pd.Series, confidence: float = 0.95):
+
+def _compute_var(returns, confidence=0.95):
     if len(returns) < 30:
         return None
     return round(float(np.percentile(returns.dropna(), (1 - confidence) * 100)) * 100, 3)
 
-def _compute_max_drawdown(prices: pd.Series):
+
+def _compute_max_drawdown(prices):
     if len(prices) < 2:
         return None
     return round(float(((prices - prices.cummax()) / prices.cummax()).min()) * 100, 2)
 
-def _compute_alpha(stock_ret: pd.Series, idx_ret: pd.Series, beta):
+
+def _compute_alpha(stock_ret, idx_ret, beta):
     if beta is None or len(stock_ret) < 30:
         return None
     aligned = pd.concat([stock_ret, idx_ret], axis=1).dropna()
-    return round((float(aligned.iloc[:, 0].mean()) * 252 - beta * float(aligned.iloc[:, 1].mean()) * 252) * 100, 2)
+    return round(
+        (float(aligned.iloc[:, 0].mean()) * 252
+         - beta * float(aligned.iloc[:, 1].mean()) * 252) * 100, 2
+    )
 
-# – Fetch helpers –
 
-# BUG_9 FIX: Do NOT pass session= to yf.Ticker().
+# ---------------------------------------------------------------------------
+# Universe helpers
+# ---------------------------------------------------------------------------
 
-# yfinance auto-detects curl_cffi when it is installed (checks via importlib).
-
-# Passing a curl_cffi.Session object as session= causes AttributeError inside
-
-# yfinance before any HTTP request fires. The fix is to let yfinance manage
-
-# its own session – it will use curl_cffi Chrome impersonation automatically.
-
-def _fetch_prices(yf_ticker: str, label: str):
-    """
-    Fetch close prices via Ticker.history().
-    Fallback chain: .NS 3y -> .NS max -> .BO 3y
-    curl_cffi is used automatically by yfinance when installed.
-    """
-    for attempt, (t, period) in enumerate([
-        (yf_ticker,                       PRICE_PERIOD),
-        (yf_ticker,                       "max"),
-        (yf_ticker.replace(".NS", ".BO"), PRICE_PERIOD),
-    ], 1):
-        try:
-            hist = yf.Ticker(t).history(
-                period=period, auto_adjust=True, actions=False, timeout=30
-            )
-            if hist is not None and not hist.empty and len(hist) > 10:
-                close = hist["Close"].squeeze()
-                log.info(f"  {label}: {len(close)} rows (attempt {attempt})")
-                return close
-        except Exception as e:
-            log.debug(f"  {label} attempt {attempt}: {e}")
-        time.sleep(1.0)
-    log.warning(f"  {label}: no data after 3 attempts")
-    return None
-
-def _fetch_fundamentals(yf_ticker: str):
-    """
-    Fetch PE, PB, div yield, market cap.
-    curl_cffi is used automatically by yfinance when installed.
-    """
-    try:
-        info = yf.Ticker(yf_ticker).info or {}
-        return {
-            "pe":        round(info.get("trailingPE",    0) or 0, 2),
-            "pb":        round(info.get("priceToBook",   0) or 0, 2),
-            "div_yield": round((info.get("dividendYield", 0) or 0) * 100, 2),
-            "mkt_cap":   info.get("marketCap"),
-            "52w_high":  info.get("fiftyTwoWeekHigh"),
-            "52w_low":   info.get("fiftyTwoWeekLow"),
-            "sector":    info.get("sector",   ""),
-            "industry":  info.get("industry", ""),
-        }
-    except Exception:
-        return {}
-
-# – Core –
-
-def get_peer_tickers(tickers: list) -> list:
+def get_peer_tickers(tickers):
     sectors = {NIFTY50[t]["sector"] for t in tickers if t in NIFTY50}
     peers   = {t for t, info in NIFTY50.items() if info["sector"] in sectors}
     peers.update(tickers)
@@ -241,32 +369,25 @@ def get_peer_tickers(tickers: list) -> list:
     log.info(f"Holdings: {len(tickers)} | Sectors: {sectors} | With peers: {len(result)}")
     return result
 
-def harvest(tickers: list = None) -> dict:
+
+# ---------------------------------------------------------------------------
+# Main harvest
+# ---------------------------------------------------------------------------
+
+def harvest(tickers=None):
     run_id  = str(uuid.uuid4())[:8]
     started = datetime.utcnow()
-    log.info(f"Harvest started – run_id: {run_id}")
-
-    # Log whether curl_cffi is available (yfinance will use it automatically)
-    try:
-        import curl_cffi
-        log.info(f"curl_cffi {curl_cffi.__version__} installed -- yfinance will use Chrome TLS impersonation")
-    except ImportError:
-        log.warning("curl_cffi not installed -- yfinance will use plain requests (may be blocked)")
+    log.info(f"Harvest started -- run_id: {run_id}")
+    log.info("Data source: NSE India official API (no rate limits)")
 
     universe = get_peer_tickers(tickers) if tickers else list(NIFTY50.keys())
     log.info(f"Universe: {len(universe)} stocks")
 
-    # Nifty50 index for beta/alpha
-    log.info("Fetching Nifty50 index...")
-    idx_ret = None
-    try:
-        idx_hist = yf.Ticker(NIFTY50_INDEX_YF).history(
-            period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=30
-        )
-        idx_ret = idx_hist["Close"].squeeze().pct_change().dropna()
-        log.info(f"  Index: {len(idx_ret)+1} rows")
-    except Exception as e:
-        log.warning(f"  Index fetch failed: {e}")
+    log.info("Fetching Nifty50 index from NSE...")
+    idx_prices = _fetch_index_prices_nse()
+    idx_ret    = idx_prices.pct_change().dropna() if idx_prices is not None else None
+    if idx_ret is None:
+        log.warning("Could not fetch index -- beta/alpha will be None for all stocks")
 
     snapshot     = []
     fundamentals = {}
@@ -275,18 +396,18 @@ def harvest(tickers: list = None) -> dict:
 
     for i, ticker in enumerate(universe, 1):
         meta = NIFTY50.get(ticker, {})
-        yf_t = meta.get("yf", f"{ticker}.NS")
         log.info(f"[{i}/{len(universe)}] {ticker}")
 
-        prices = _fetch_prices(yf_t, ticker)
+        prices = _fetch_prices_nse(ticker, ticker)
 
         if prices is None or len(prices) < 20:
+            log.warning(f"  {ticker}: insufficient data -- skipping")
             failed.append(ticker)
             time.sleep(THROTTLE_SECS)
             continue
 
         ret    = prices.pct_change().dropna()
-        beta   = _compute_beta(ret, idx_ret)        if idx_ret is not None else None
+        beta   = _compute_beta(ret, idx_ret)         if idx_ret is not None else None
         alpha  = _compute_alpha(ret, idx_ret, beta)  if idx_ret is not None else None
         sma50  = round(float(prices.rolling(50).mean().iloc[-1]),  2) if len(prices) >= 50  else None
         sma200 = round(float(prices.rolling(200).mean().iloc[-1]), 2) if len(prices) >= 200 else None
@@ -300,7 +421,6 @@ def harvest(tickers: list = None) -> dict:
             "ticker":       ticker,
             "name":         meta.get("name", ticker),
             "sector":       meta.get("sector", "Unknown"),
-            "yf_ticker":    yf_t,
             "price":        price,
             "rsi":          _compute_rsi(prices),
             "macd":         _compute_macd(prices),
@@ -321,7 +441,7 @@ def harvest(tickers: list = None) -> dict:
         })
 
         if ticker not in fundamentals:
-            fundamentals[ticker] = _fetch_fundamentals(yf_t)
+            fundamentals[ticker] = _fetch_fundamentals_nse(ticker)
 
         success += 1
         time.sleep(THROTTLE_SECS)
@@ -350,16 +470,23 @@ def harvest(tickers: list = None) -> dict:
     log.info(f"Harvest complete: {success} ok, {len(failed)} failed, {duration}s")
     return summary
 
-# – Entry point –
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     log.info("=== Agent_Trader Harvest Runner ===")
+    log.info("Data source: NSE India official API")
 
     conn = gs.test_connection()
     for k, v in conn.items():
         log.info(f"  {k}: {v}")
 
-    if not all("OK" in str(v) or "accessible" in str(v) or "valid" in str(v) or "found" in str(v) for v in conn.values()):
+    if not all(
+        "OK" in str(v) or "accessible" in str(v) or "valid" in str(v) or "found" in str(v)
+        for v in conn.values()
+    ):
         log.error("Connectivity check failed -- aborting")
         sys.exit(1)
 

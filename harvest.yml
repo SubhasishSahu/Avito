@@ -1,0 +1,69 @@
+name: Agent_Trader Harvest
+
+on:
+  # Daily Mon-Fri at 07:00 IST (01:30 UTC)
+  schedule:
+    - cron: "30 1 * * 1-5"
+
+  # Fires when Streamlit writes a new holdings_trigger.enc (user uploads Excel)
+  push:
+    branches:
+      - master
+    paths:
+      - "db/holdings_trigger.enc"
+
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Harvest mode"
+        required: false
+        default: "auto"
+        type: choice
+        options:
+          - auto        # reads holdings_trigger.enc if present, else full harvest
+          - full        # force full Nifty50 harvest regardless of trigger
+
+permissions:
+  contents: write       # needed to commit db/*.enc files back to repo
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30   # kill if hung
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run harvest
+        env:
+          FERNET_KEY:    ${{ secrets.FERNET_KEY }}
+          GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO:   SubhasishSahu/Avito
+          GITHUB_BRANCH: master
+          HARVEST_MODE:  ${{ github.event.inputs.mode || 'auto' }}
+        run: |
+          cd $GITHUB_WORKSPACE
+          python harvest_runner.py
+
+      - name: Confirm db files written
+        run: |
+          echo "=== db/ folder contents ==="
+          ls -lh db/ || echo "db/ folder empty or missing"
+          echo "=== Last 5 commits ==="
+          git log --oneline -5

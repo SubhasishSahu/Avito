@@ -1,19 +1,13 @@
-# Agent_Trader -- Avito
-# Works in: GitHub Actions, Streamlit Cloud, Google Colab
+# Agent_Trader -- Avito stack
+# GitHub Actions + Streamlit Cloud
 
-# Data
-yfinance==0.2.54
+# Data -- NSE India official API (no rate limits, no Yahoo dependency)
 pandas==2.2.3
 numpy==1.26.4
-
-# TLS impersonation -- bypasses Yahoo Finance IP blocking on GitHub Actions
-curl_cffi==0.6.4
-
-# Encryption
-cryptography==42.0.8
-
-# GitHub API
 requests==2.32.3
+
+# Encryption + GitHub API
+cryptography==42.0.8
 
 # Dashboard
 streamlit==1.40.0
