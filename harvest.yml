@@ -1,12 +1,20 @@
 name: Agent_Trader Harvest
 
 on:
-  # Daily Mon-Fri at midnight IST = 18:30 UTC (post market-close, low traffic)
-  # Primary: Stooq (no IP blocking), Fallback: yfinance (reliable at low-traffic hours)
+  # PRIMARY: Daily Mon-Fri at midnight IST = 18:30 UTC
+  # Both Stooq and yfinance work reliably at this time (post-market, low traffic)
   schedule:
     - cron: "30 18 * * 1-5"
 
-  # Fires when Streamlit writes a new holdings_trigger.enc (user uploads Excel)
+  # SECONDARY: Early morning IST = 01:30 UTC (pre-market backup)
+  # If midnight run failed, this catches it before market open
+  # schedule:
+  #   - cron: "30 1 * * 2-6"   # uncomment if you want a second attempt
+
+  # Triggered when Streamlit writes holdings_trigger.enc (user uploads Excel)
+  # NOTE: This fires the harvest immediately. If it's market hours and data
+  # sources are blocked, the harvest will preserve existing snapshot data
+  # (BUG_13 fix) and the new stocks will be picked up at the next midnight run.
   push:
     branches:
       - master

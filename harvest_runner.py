@@ -551,14 +551,30 @@ def get_peer_tickers(tickers):
 # Main harvest
 # ---------------------------------------------------------------------------
 
-def harvest(tickers=None):
+def harvest(extra_tickers=None, tickers=None):
+    """
+    Harvest price data for Nifty50 universe + any extra non-Nifty50 holdings.
+
+    Args:
+        extra_tickers: list of non-Nifty50 NSE symbols to fetch in addition
+                       to the full Nifty50 (e.g. ['HAL', 'IRCTC', 'TATATECH'])
+        tickers:       DEPRECATED -- kept for backward compat, ignored if
+                       extra_tickers is provided
+    """
     run_id  = str(uuid.uuid4())[:8]
     started = datetime.utcnow()
     log.info(f"Harvest started -- run_id: {run_id}")
     log.info("Data source: Stooq (primary) -> yfinance (fallback)")
 
-    universe = get_peer_tickers(tickers) if tickers else list(NIFTY50.keys())
-    log.info(f"Universe: {len(universe)} stocks")
+    # Always harvest full Nifty50; extra_tickers adds non-Nifty50 holdings on top
+    nifty_universe = list(NIFTY50.keys())
+    if extra_tickers:
+        deduped_extra = [t for t in extra_tickers if t not in NIFTY50]
+        universe = nifty_universe + deduped_extra
+        log.info(f"Universe: {len(nifty_universe)} Nifty50 + {len(deduped_extra)} extra = {len(universe)} total")
+    else:
+        universe = nifty_universe
+        log.info(f"Universe: {len(universe)} stocks (full Nifty50)")
 
     log.info("Fetching Nifty50 index...")
     idx_prices = _fetch_index()
@@ -625,17 +641,55 @@ def harvest(tickers=None):
         time.sleep(THROTTLE_SECS)
 
     log.info("Writing encrypted data to GitHub db/...")
+
+    # ── Merge strategy: preserve existing good data for stocks we didn't fetch ──
+    # BUG_12 fix: triggered harvest was overwriting the full snapshot with only
+    # the user's holding stocks (45), wiping the 48-stock Nifty50 data.
+    # Now we load the existing snapshot and merge: new data wins for tickers we
+    # successfully fetched, existing data is kept for everything else.
+    final_snapshot  = snapshot   # start with what we just fetched
+    final_funds     = dict(fundamentals)
+
+    if extra_tickers and snapshot:
+        # This was a targeted harvest -- merge into existing snapshot
+        existing = gs.read("snapshot") or {}
+        existing_stocks = existing.get("stocks", [])
+        if existing_stocks:
+            existing_map = {s["ticker"]: s for s in existing_stocks}
+            new_map      = {s["ticker"]: s for s in snapshot}
+            # Merge: new data wins, existing data fills gaps
+            merged = {**existing_map, **new_map}
+            final_snapshot = list(merged.values())
+            merged_new = len(new_map)
+            merged_kept = len(existing_map) - len([t for t in existing_map if t in new_map])
+            log.info(f"Snapshot merge: {merged_new} updated + {merged_kept} kept from previous = {len(final_snapshot)} total")
+
+        existing_f = gs.read("fundamentals") or {}
+        existing_fdata = existing_f.get("data", {})
+        final_funds = {**existing_fdata, **fundamentals}  # new wins
+    elif not snapshot:
+        # Zero stocks fetched -- do NOT overwrite existing snapshot
+        log.warning("Zero stocks fetched -- skipping snapshot write to preserve existing data")
+        gs.write_metadata(0, [], run_id)
+        return {
+            "run_id":   run_id,
+            "success":  0,
+            "failed":   len(failed),
+            "duration": round((datetime.utcnow() - started).total_seconds(), 1),
+            "status":   "blocked",
+        }
+
     gs.write("snapshot", {
         "generated_at": datetime.utcnow().isoformat(),
         "run_id":       run_id,
-        "count":        len(snapshot),
-        "stocks":       snapshot,
-    }, f"harvest snapshot: {success} stocks")
+        "count":        len(final_snapshot),
+        "stocks":       final_snapshot,
+    }, f"harvest snapshot: {success} new + {len(final_snapshot)-success} existing")
     gs.write("fundamentals", {
         "generated_at": datetime.utcnow().isoformat(),
-        "data":         fundamentals,
+        "data":         final_funds,
     })
-    gs.write_metadata(success, [s["ticker"] for s in snapshot], run_id)
+    gs.write_metadata(success, [s["ticker"] for s in final_snapshot], run_id)
 
     duration = round((datetime.utcnow() - started).total_seconds(), 1)
     summary  = {
@@ -685,17 +739,33 @@ if __name__ == "__main__":
         log.error("Connectivity check failed -- aborting")
         sys.exit(1)
 
-    tickers = None
+    # ── Harvest strategy ──────────────────────────────────────────────────────
+    # BUG_13 fix: triggered harvest was scoped to only user holdings, missing
+    # Nifty50 peer data that Streamlit needs. Strategy:
+    #   - Always harvest full Nifty50 (50 stocks, peer comparisons)
+    #   - ADDITIONALLY fetch any user holding tickers not in Nifty50
+    #   - Trigger file signals WHICH extra tickers to add, not which to limit to
+
+    extra_tickers = []
     trigger = gs.read("holdings_trigger")
     if trigger and "tickers" in trigger:
-        tickers = trigger["tickers"]
-        log.info(f"Targeted harvest -- {len(tickers)} holdings")
+        raw_tickers = trigger["tickers"]
+        # Normalize and find non-Nifty50 holdings
+        normalized  = [normalize_ticker(t) for t in raw_tickers]
+        extra_tickers = [t for t in normalized if t not in NIFTY50]
+        if extra_tickers:
+            log.info(f"Trigger: adding {len(extra_tickers)} non-Nifty50 holdings: {extra_tickers}")
+        else:
+            log.info("Trigger: all holdings are in Nifty50 universe -- full harvest only")
     else:
         log.info("No trigger -- full Nifty50 harvest")
 
-    summary = harvest(tickers)
+    summary = harvest(extra_tickers=extra_tickers)
     log.info(f"Done: {summary}")
 
-    if summary["success"] == 0:
+    if summary["success"] == 0 and summary.get("status") == "blocked":
+        log.warning("All sources blocked -- existing snapshot preserved. Will retry at next scheduled run.")
+        sys.exit(1)
+    elif summary["success"] == 0:
         log.error("Zero stocks harvested -- marking as failed")
         sys.exit(1)
