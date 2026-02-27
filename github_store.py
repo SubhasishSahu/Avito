@@ -159,7 +159,35 @@ def write(name: str, data: dict | list, commit_message: str = None) -> bool:
         log.info(f"✅ GitHub write: {path} {action}")
         return True
     else:
-        log.error(f"❌ GitHub write failed: {r.status_code} -- {r.text[:200]}")
+        # Provide actionable error detail
+        try:
+            err_json = r.json()
+            err_msg  = err_json.get("message", r.text[:300])
+        except Exception:
+            err_msg = r.text[:300]
+
+        if r.status_code == 401:
+            log.error(
+                f"❌ GitHub write 401 Unauthorized: token invalid or missing. "
+                f"Streamlit Cloud needs a Personal Access Token (PAT) with "
+                f"repo scope, not the GitHub Actions GITHUB_TOKEN. "
+                f"Create one at github.com/settings/tokens and add it to "
+                f"Streamlit Cloud → App Settings → Secrets as GITHUB_TOKEN."
+            )
+        elif r.status_code == 403:
+            log.error(
+                f"❌ GitHub write 403 Forbidden: token lacks write permission. "
+                f"Ensure the PAT has 'Contents: Read and Write' (fine-grained) "
+                f"or 'repo' scope (classic). Error: {err_msg}"
+            )
+        elif r.status_code == 404:
+            log.error(
+                f"❌ GitHub write 404: repo or path not found. "
+                f"Check GITHUB_REPO='{REPO}' and that db/ folder exists. "
+                f"Error: {err_msg}"
+            )
+        else:
+            log.error(f"❌ GitHub write failed: HTTP {r.status_code} -- {err_msg}")
         return False
 
 
