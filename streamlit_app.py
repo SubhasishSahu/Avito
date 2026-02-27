@@ -28,7 +28,7 @@ import requests
 warnings.filterwarnings("ignore")
 
 # ── Inject Streamlit secrets into environment ──────────────────────────────────
-for key in ["FERNET_KEY", "GITHUB_TOKEN", "GITHUB_REPO", "GITHUB_BRANCH"]:
+for key in ["FERNET_KEY", "GITHUB_TOKEN", "GITHUB_REPO", "GITHUB_BRANCH", "FMP_API_KEY"]:
     if key in st.secrets and key not in os.environ:
         os.environ[key] = st.secrets[key]
 

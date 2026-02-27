@@ -66,6 +66,8 @@ jobs:
           GITHUB_REPO:   SubhasishSahu/Avito
           GITHUB_BRANCH: master
           HARVEST_MODE:  ${{ github.event.inputs.mode || 'auto' }}
+          # FMP_API_KEY: free at financialmodelingprep.com -- proper API, no bot block
+          FMP_API_KEY:   ${{ secrets.FMP_API_KEY }}
         run: |
           cd $GITHUB_WORKSPACE
           python harvest_runner.py

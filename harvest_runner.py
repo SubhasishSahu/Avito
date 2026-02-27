@@ -314,117 +314,381 @@ PRICE_PERIOD  = "3y"
 
 
 # ---------------------------------------------------------------------------
-# Multi-browser TLS fingerprint rotation engine
+# Multi-browser rotation engine
 #
-# WHY: Stooq and Yahoo Finance detect and block datacenter IPs using TLS
-# fingerprinting -- they inspect the ClientHello cipher suites, extension
-# order, and GREASE values to identify non-browser clients.
+# WHY: Stooq and Yahoo detect bots via TWO layers:
+#   Layer 1 - HTTP:  User-Agent + Accept/Accept-Language/Sec-* headers must
+#             form a CONSISTENT set matching a real browser. A Chrome UA with
+#             Firefox Accept headers is WORSE than no UA (immediate flag).
+#   Layer 2 - TLS:   ClientHello cipher suites, extension order, GREASE
+#             values differ by browser engine. curl_cffi replays exact TLS
+#             handshakes when available. Without it, plain requests still
+#             gains significant benefit from correct HTTP header profiles.
 #
-# HOW: curl_cffi replays exact browser TLS handshakes. Each impersonation
-# target produces a distinct ClientHello that is indistinguishable from a
-# real browser at the TLS layer. Rotating across Chrome, Safari, and Firefox
-# means even if one fingerprint is flagged, the others succeed.
+# PROFILES (ordered best-first for Stooq/Yahoo evasion):
+#   1. safari_mac     -- WebKit engine, distinct TLS, no Sec-CH-UA hints,
+#                        less common for automated scrapers -> least flagged
+#   2. firefox_win    -- Gecko engine, different header ordering, no CH hints
+#   3. chrome_android -- Mobile UA, separate throttle bucket on many servers
+#   4. edge_win       -- Chromium but distinct UA string pattern
+#   5. chrome_win     -- Most common, most scrutinised -> last resort
 #
-# ROTATION ORDER per request (4 attempts total):
-#   Attempt 1: Chrome 120  (Win) -- most common desktop browser worldwide
-#   Attempt 2: Safari 15.5 (macOS) -- distinct cipher suite order vs Chrome
-#   Attempt 3: Firefox 110  -- different TLS extension order entirely
-#   Attempt 4: Chrome 107  -- older Chrome, different GREASE pattern
-#
-# Each has a distinct User-Agent string that matches the TLS fingerprint,
-# so both layers (HTTP + TLS) are consistent.
+# Each profile: (curl_cffi_target, UA_string, full_headers_dict)
+# Headers are ordered correctly per spec for each browser engine.
 # ---------------------------------------------------------------------------
 
-# (impersonation_target, User-Agent string)
 _BROWSER_PROFILES = [
     (
-        "chrome120",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36",
-    ),
-    (
         "safari15_5",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 12_4) "
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) "
         "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        "Version/15.5 Safari/605.1.15",
+        "Version/17.2 Safari/605.1.15",
+        {   # Safari sends these in this exact order; no Sec-CH-UA (WebKit doesn't support)
+            "User-Agent":              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language":         "en-GB,en;q=0.9",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+        },
     ),
     (
-        "firefox110",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:110.0) "
-        "Gecko/20100101 Firefox/110.0",
+        "firefox122",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
+        "Gecko/20100101 Firefox/122.0",
+        {   # Firefox header order: no Sec-CH-UA (Gecko doesn't support client hints)
+            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language":         "en-US,en;q=0.5",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
     ),
     (
-        "chrome107",
+        "chrome120",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.6099.210 Mobile Safari/537.36",
+        {   # Chrome Android -- mobile UA, separate rate-limit bucket
+            "User-Agent":              "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.210 Mobile Safari/537.36",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language":         "en-IN,en-GB;q=0.9,en;q=0.8",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-CH-UA":               '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            "Sec-CH-UA-Mobile":        "?1",
+            "Sec-CH-UA-Platform":      '"Android"',
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
+    ),
+    (
+        "edge101",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/107.0.0.0 Safari/537.36",
+        "Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+        {   # Edge -- Chromium base but distinct UA and CH-UA brand
+            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language":         "en-US,en;q=0.9",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-CH-UA":               '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
+            "Sec-CH-UA-Mobile":        "?0",
+            "Sec-CH-UA-Platform":      '"Windows"',
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
+    ),
+    (
+        "chrome121",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.0.0 Safari/537.36",
+        {   # Chrome Windows -- most common, most scrutinised, last resort
+            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language":         "en-US,en;q=0.9",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-CH-UA":               '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            "Sec-CH-UA-Mobile":        "?0",
+            "Sec-CH-UA-Platform":      '"Windows"',
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
     ),
 ]
+
+# Map profile name -> curl_cffi impersonate target
+_CFFI_TARGET = {
+    "safari15_5":    "safari15_5",
+    "firefox122":    "firefox110",   # closest available in curl_cffi
+    "chrome120":     "chrome120",
+    "edge101":       "edge101",
+    "chrome121":     "chrome120",    # use chrome120 TLS for chrome121
+}
 
 # Detect curl_cffi once at import time
 try:
     from curl_cffi import requests as cffi_requests
     _CURL_CFFI_OK = True
-    log.info("curl_cffi available -- TLS browser impersonation enabled")
+    log.info("curl_cffi available -- full TLS + HTTP browser impersonation active")
 except ImportError:
     _CURL_CFFI_OK = False
-    log.warning("curl_cffi not installed -- falling back to plain requests (less evasion)")
+    log.info("curl_cffi not installed -- HTTP-layer rotation only (still effective)")
 
 
-def _cffi_get(url: str, params: dict, impersonate: str, ua: str, timeout: int = 20):
-    """Single curl_cffi GET with a specific browser impersonation."""
-    from curl_cffi import requests as cffi_requests
-    return cffi_requests.get(
-        url,
-        params=params,
-        headers={"User-Agent": ua, "Accept": "text/html,*/*;q=0.9"},
-        impersonate=impersonate,
-        timeout=timeout,
-    )
+def _make_session(headers: dict) -> requests.Session:
+    """Build a requests.Session with the given browser headers pre-set."""
+    s = requests.Session()
+    s.headers.clear()
+    for k, v in headers.items():
+        s.headers[k] = v
+    return s
 
 
-def _plain_get(url: str, params: dict, ua: str, timeout: int = 20):
-    """Fallback plain requests GET when curl_cffi not available."""
-    return requests.get(
-        url,
-        params=params,
-        headers={"User-Agent": ua},
-        timeout=timeout,
-    )
+# Pre-built sessions, one per profile (reused across requests)
+_PROFILE_SESSIONS: dict = {}
+
+
+def _get_profile_session(profile_name: str, headers: dict) -> requests.Session:
+    if profile_name not in _PROFILE_SESSIONS:
+        _PROFILE_SESSIONS[profile_name] = _make_session(headers)
+    return _PROFILE_SESSIONS[profile_name]
 
 
 def _rotating_get(url: str, params: dict, label: str, timeout: int = 20):
     """
-    Try each browser profile in rotation until one succeeds.
+    Try each browser profile in order until one returns valid CSV data.
     Returns (response_text, profile_name) or (None, None).
+
+    Detection avoidance:
+    - Each profile sends a complete, consistent header set for that browser
+    - Safari and Firefox profiles lack Sec-CH-UA (those browsers don't send it)
+    - curl_cffi adds TLS fingerprint matching when available
+    - Sessions are reused so TCP connections persist (more browser-like)
     """
-    for i, (impersonate, ua) in enumerate(_BROWSER_PROFILES):
+    for profile_name, ua, headers in _BROWSER_PROFILES:
         try:
             if _CURL_CFFI_OK:
-                r = _cffi_get(url, params, impersonate, ua, timeout)
+                from curl_cffi import requests as cffi_requests
+                impersonate = _CFFI_TARGET.get(profile_name, "chrome120")
+                r = cffi_requests.get(
+                    url, params=params, headers=headers,
+                    impersonate=impersonate, timeout=timeout,
+                )
             else:
-                r = _plain_get(url, params, ua, timeout)
+                sess = _get_profile_session(profile_name, headers)
+                r = sess.get(url, params=params, timeout=timeout)
 
             if r.status_code == 200:
                 text = r.text.strip()
-                if text and "<html" not in text.lower() and "No data" not in text:
-                    log.debug(f"  {label}: success with {impersonate}")
-                    return text, impersonate
+                # Valid Stooq CSV starts with "Date," header, not HTML
+                if (text
+                        and len(text) > 100
+                        and text.startswith("Date,")
+                        and "No data" not in text
+                        and "<html" not in text.lower()):
+                    log.debug(f"  {label}: success with [{profile_name}]")
+                    return text, profile_name
                 else:
-                    log.debug(f"  {label} [{impersonate}]: empty/html response")
+                    log.debug(f"  {label} [{profile_name}]: non-CSV response ({len(text)} bytes)")
             elif r.status_code == 429:
-                log.debug(f"  {label} [{impersonate}]: 429 rate-limited, rotating")
-                time.sleep(1.5)
+                log.debug(f"  {label} [{profile_name}]: 429 -- pausing 2s before next profile")
+                time.sleep(2.0)
             else:
-                log.debug(f"  {label} [{impersonate}]: HTTP {r.status_code}")
+                log.debug(f"  {label} [{profile_name}]: HTTP {r.status_code}")
 
         except Exception as e:
-            log.debug(f"  {label} [{impersonate}]: {type(e).__name__}: {e}")
-            if i < len(_BROWSER_PROFILES) - 1:
-                time.sleep(0.5)
+            log.debug(f"  {label} [{profile_name}]: {type(e).__name__}: {e}")
+
+        # Brief pause between profile attempts to avoid hammering
+        time.sleep(0.3)
 
     return None, None
+
+
+# ---------------------------------------------------------------------------
+# Source 0: Financial Modeling Prep (FMP) -- TRUE PRIMARY
+#
+# FMP is a proper REST API with an API key (stored in GitHub Secrets as
+# FMP_API_KEY). It serves NSE historical data without Cloudflare, without
+# IP-based blocking, and is guaranteed to work from Azure datacenter IPs.
+#
+# Free tier: 250 calls/day, 300 calls/min -- sufficient for 89 stocks/day.
+# Endpoint:  /api/v3/historical-price-full/{SYMBOL.NS}
+#            ?from=YYYY-MM-DD&to=YYYY-MM-DD&apikey=KEY
+#
+# If FMP_API_KEY is not set, this source is skipped silently.
+# ---------------------------------------------------------------------------
+
+_FMP_API_KEY  = os.environ.get("FMP_API_KEY", "").strip()
+_FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
+_fmp_session  = None
+
+
+def _get_fmp_session() -> requests.Session:
+    global _fmp_session
+    if _fmp_session is None:
+        _fmp_session = requests.Session()
+        _fmp_session.headers.update({
+            "User-Agent": "Agent_Trader/1.0",
+            "Accept":     "application/json",
+        })
+    return _fmp_session
+
+
+def _fetch_prices_fmp(nse_symbol: str, label: str) -> "pd.Series | None":
+    """
+    Fetch 3y daily close prices from FMP for an NSE symbol.
+    Tries SYMBOL.NS first, then SYMBOL.BO (BSE) as fallback.
+    Returns pd.Series or None.
+    """
+    if not _FMP_API_KEY:
+        return None
+
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 60)
+
+    sess     = _get_fmp_session()
+    suffixes = [".NS", ".BO"]  # NSE first, BSE fallback
+
+    for suffix in suffixes:
+        sym = nse_symbol.upper() + suffix
+        url = f"{_FMP_BASE_URL}/historical-price-full/{sym}"
+        params = {
+            "from":   start_dt.strftime("%Y-%m-%d"),
+            "to":     end_dt.strftime("%Y-%m-%d"),
+            "apikey": _FMP_API_KEY,
+        }
+        try:
+            r = sess.get(url, params=params, timeout=20)
+            if r.status_code == 401:
+                log.error("FMP: Invalid API key -- check FMP_API_KEY secret")
+                return None
+            if r.status_code != 200:
+                log.debug(f"  {label} FMP{suffix}: HTTP {r.status_code}")
+                continue
+
+            data = r.json()
+            historical = data.get("historical", [])
+            if not historical:
+                log.debug(f"  {label} FMP{suffix}: empty historical data")
+                continue
+
+            df = pd.DataFrame(historical)
+            df["date"]  = pd.to_datetime(df["date"])
+            df = df.sort_values("date").set_index("date")
+            prices = df["close"].astype(float)
+            prices.index.name = "Date"
+
+            if len(prices) >= 20:
+                log.info(f"  {label}: {len(prices)} rows via FMP{suffix} ✓")
+                return prices
+
+        except Exception as e:
+            log.debug(f"  {label} FMP{suffix}: {type(e).__name__}: {e}")
+
+    return None
+
+
+def _fetch_index_fmp() -> "pd.Series | None":
+    """Fetch Nifty50 index via FMP (^NSEI)."""
+    if not _FMP_API_KEY:
+        return None
+
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 60)
+    sess     = _get_fmp_session()
+    url      = f"{_FMP_BASE_URL}/historical-price-full/%5ENSEI"
+    params   = {
+        "from":   start_dt.strftime("%Y-%m-%d"),
+        "to":     end_dt.strftime("%Y-%m-%d"),
+        "apikey": _FMP_API_KEY,
+    }
+    try:
+        r = sess.get(url, params=params, timeout=20)
+        if r.status_code == 200:
+            historical = r.json().get("historical", [])
+            if historical:
+                df = pd.DataFrame(historical)
+                df["date"] = pd.to_datetime(df["date"])
+                prices = df.sort_values("date").set_index("date")["close"].astype(float)
+                prices.index.name = "Date"
+                if len(prices) >= 20:
+                    log.info(f"  Nifty50-index: {len(prices)} rows via FMP ✓")
+                    return prices
+    except Exception as e:
+        log.debug(f"  Nifty50-index FMP: {e}")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic helper -- logs EXACT server response on first failure
+# so we know whether it's Cloudflare, 403, empty CSV, etc.
+# ---------------------------------------------------------------------------
+
+_diagnosed = False  # only run once per harvest
+
+
+def _run_diagnosis(url: str, params: dict):
+    """
+    Log exactly what the server returns -- status, headers, body preview.
+    Identifies Cloudflare (CF-Ray header), soft blocks (HTML body),
+    hard blocks (403/429), or connectivity issues.
+    """
+    global _diagnosed
+    if _diagnosed:
+        return
+    _diagnosed = True
+
+    log.info("── Diagnosing data source response ──")
+    try:
+        r = requests.get(url, params=params,
+                         headers={"User-Agent": "Mozilla/5.0"},
+                         timeout=15)
+        cf_ray   = r.headers.get("CF-Ray", "none")
+        cf_cache = r.headers.get("CF-Cache-Status", "none")
+        ctype    = r.headers.get("Content-Type", "?")
+        body     = r.text[:300].replace("\n", " ").strip()
+        is_cf    = cf_ray != "none" or "cloudflare" in r.headers.get("Server", "").lower()
+
+        log.info(f"  URL:          {r.url[:80]}")
+        log.info(f"  HTTP status:  {r.status_code}")
+        log.info(f"  Server:       {r.headers.get('Server', '?')}")
+        log.info(f"  Cloudflare:   {'YES -- CF-Ray: ' + cf_ray if is_cf else 'NO'}")
+        log.info(f"  Content-Type: {ctype}")
+        log.info(f"  Body[:300]:   {body}")
+
+        if is_cf and r.status_code in (403, 503):
+            log.warning("  → Cloudflare Bot Fight Mode active. API key (FMP/Twelve Data) required.")
+        elif is_cf and r.status_code == 200 and "<html" in r.text.lower():
+            log.warning("  → Cloudflare JS challenge page. cf_clearance cookie required.")
+        elif r.status_code == 429:
+            log.warning("  → Rate limited (429). Back off or rotate source.")
+        elif r.status_code == 200 and r.text.strip().startswith("Date,"):
+            log.info("  → Valid CSV! Check _rotating_get logic.")
+        elif r.status_code == 200:
+            log.warning("  → HTTP 200 but non-CSV body. Soft block or wrong symbol.")
+
+    except Exception as e:
+        log.info(f"  Connection failed: {type(e).__name__}: {e}")
+        log.info("  → Network-level block or DNS failure from this IP range.")
+    log.info("── End diagnosis ──")
 
 
 # ---------------------------------------------------------------------------
@@ -536,22 +800,46 @@ def _fetch_index_yf() -> pd.Series | None:
 # ---------------------------------------------------------------------------
 
 def _fetch_prices(ticker: str, meta: dict) -> pd.Series | None:
-    # stooq key holds the base symbol (we try .ns and .bo automatically)
+    """
+    Unified waterfall:
+      0. FMP  -- proper REST API with key, guaranteed no bot block
+      1. Stooq -- multi-browser rotation (.ns then .bo suffix)
+      2. yfinance -- fallback, reliable at off-peak hours
+    """
     stooq_base = meta.get("stooq", f"{ticker.lower()}.ns")
     yf_sym     = meta.get("yf",    f"{ticker}.NS")
 
+    # Source 0: FMP (only if API key is configured)
+    if _FMP_API_KEY:
+        prices = _fetch_prices_fmp(ticker, ticker)
+        if prices is not None:
+            return prices
+        log.debug(f"  {ticker}: FMP failed, trying Stooq")
+
+    # Source 1: Stooq with multi-browser rotation
     prices = _fetch_prices_stooq(stooq_base, ticker)
     if prices is not None:
         return prices
 
-    log.debug(f"  {ticker}: all Stooq variants failed, trying yfinance")
+    # On first Stooq failure, log exactly what the server returned
+    _run_diagnosis("https://stooq.com/q/d/l/", {"s": stooq_base, "i": "d"})
+
+    # Source 2: yfinance
+    log.debug(f"  {ticker}: Stooq failed, trying yfinance")
     return _fetch_prices_yf(yf_sym, ticker)
 
 
 def _fetch_index() -> pd.Series | None:
+    """Nifty50 index waterfall: FMP -> Stooq -> yfinance."""
+    if _FMP_API_KEY:
+        idx = _fetch_index_fmp()
+        if idx is not None:
+            return idx
+
     idx = _fetch_index_stooq()
     if idx is not None:
         return idx
+
     log.debug("  Index: Stooq failed, trying yfinance")
     return _fetch_index_yf()
 
