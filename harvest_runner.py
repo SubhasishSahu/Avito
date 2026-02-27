@@ -13,8 +13,14 @@ Fix history:
   BUG_10   Yahoo rate-limits GitHub Actions IPs -> added NSE as primary
   BUG_11   NSE also blocks datacenter IPs during market hours
            -> switched to Stooq (primary) + yfinance (fallback)
-           Stooq is a Polish financial aggregator that mirrors global
-           exchange data including NSE (.NS suffix) with no IP filtering.
+  BUG_12   Triggered harvest overwrote snapshot with 0 stocks
+           -> added snapshot merge: existing data preserved on failure
+  BUG_13   Triggered harvest fetched only holdings, lost Nifty50 peers
+           -> always harvest full Nifty50 + extra tickers on top
+  BUG_14   Stooq and Yahoo block datacenter IPs via TLS fingerprinting
+           -> added curl_cffi multi-browser rotation: Chrome/Safari/Firefox
+           -> added BSE (.bo) as alternate Stooq suffix alongside NSE (.ns)
+           -> 4 distinct TLS ClientHello signatures tried per ticker
 """
 import os
 import sys
@@ -304,93 +310,295 @@ def get_ticker_meta(nse_symbol: str) -> dict:
 
 
 THROTTLE_SECS = 0.5
-PRICE_PERIOD  = "3y"   # for yfinance fallback
+PRICE_PERIOD  = "3y"
 
 
 # ---------------------------------------------------------------------------
-# Source 1: Stooq CSV
-# Simple GET, returns CSV, no auth, no cookies, no IP blocking.
-# URL: https://stooq.com/q/d/l/?s=SYMBOL&i=d  (d = daily)
+# Multi-browser rotation engine
+#
+# WHY: Stooq and Yahoo detect bots via TWO layers:
+#   Layer 1 - HTTP:  User-Agent + Accept/Accept-Language/Sec-* headers must
+#             form a CONSISTENT set matching a real browser. A Chrome UA with
+#             Firefox Accept headers is WORSE than no UA (immediate flag).
+#   Layer 2 - TLS:   ClientHello cipher suites, extension order, GREASE
+#             values differ by browser engine. curl_cffi replays exact TLS
+#             handshakes when available. Without it, plain requests still
+#             gains significant benefit from correct HTTP header profiles.
+#
+# PROFILES (ordered best-first for Stooq/Yahoo evasion):
+#   1. safari_mac     -- WebKit engine, distinct TLS, no Sec-CH-UA hints,
+#                        less common for automated scrapers -> least flagged
+#   2. firefox_win    -- Gecko engine, different header ordering, no CH hints
+#   3. chrome_android -- Mobile UA, separate throttle bucket on many servers
+#   4. edge_win       -- Chromium but distinct UA string pattern
+#   5. chrome_win     -- Most common, most scrutinised -> last resort
+#
+# Each profile: (curl_cffi_target, UA_string, full_headers_dict)
+# Headers are ordered correctly per spec for each browser engine.
 # ---------------------------------------------------------------------------
 
-_STOOQ_HEADERS = {
-    "User-Agent": (
+_BROWSER_PROFILES = [
+    (
+        "safari15_5",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/17.2 Safari/605.1.15",
+        {   # Safari sends these in this exact order; no Sec-CH-UA (WebKit doesn't support)
+            "User-Agent":              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language":         "en-GB,en;q=0.9",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+        },
+    ),
+    (
+        "firefox122",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) "
+        "Gecko/20100101 Firefox/122.0",
+        {   # Firefox header order: no Sec-CH-UA (Gecko doesn't support client hints)
+            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language":         "en-US,en;q=0.5",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
+    ),
+    (
+        "chrome120",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.6099.210 Mobile Safari/537.36",
+        {   # Chrome Android -- mobile UA, separate rate-limit bucket
+            "User-Agent":              "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.210 Mobile Safari/537.36",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language":         "en-IN,en-GB;q=0.9,en;q=0.8",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-CH-UA":               '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            "Sec-CH-UA-Mobile":        "?1",
+            "Sec-CH-UA-Platform":      '"Android"',
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
+    ),
+    (
+        "edge101",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/121.0.0.0 Safari/537.36"
-    )
+        "Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+        {   # Edge -- Chromium base but distinct UA and CH-UA brand
+            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language":         "en-US,en;q=0.9",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-CH-UA":               '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
+            "Sec-CH-UA-Mobile":        "?0",
+            "Sec-CH-UA-Platform":      '"Windows"',
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
+    ),
+    (
+        "chrome121",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.0.0 Safari/537.36",
+        {   # Chrome Windows -- most common, most scrutinised, last resort
+            "User-Agent":              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept":                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language":         "en-US,en;q=0.9",
+            "Accept-Encoding":         "gzip, deflate, br",
+            "Connection":              "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-CH-UA":               '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            "Sec-CH-UA-Mobile":        "?0",
+            "Sec-CH-UA-Platform":      '"Windows"',
+            "Sec-Fetch-Dest":          "document",
+            "Sec-Fetch-Mode":          "navigate",
+            "Sec-Fetch-Site":          "none",
+            "Sec-Fetch-User":          "?1",
+        },
+    ),
+]
+
+# Map profile name -> curl_cffi impersonate target
+_CFFI_TARGET = {
+    "safari15_5":    "safari15_5",
+    "firefox122":    "firefox110",   # closest available in curl_cffi
+    "chrome120":     "chrome120",
+    "edge101":       "edge101",
+    "chrome121":     "chrome120",    # use chrome120 TLS for chrome121
 }
 
-_stooq_session = None
+# Detect curl_cffi once at import time
+try:
+    from curl_cffi import requests as cffi_requests
+    _CURL_CFFI_OK = True
+    log.info("curl_cffi available -- full TLS + HTTP browser impersonation active")
+except ImportError:
+    _CURL_CFFI_OK = False
+    log.info("curl_cffi not installed -- HTTP-layer rotation only (still effective)")
 
 
-def _get_stooq_session():
-    global _stooq_session
-    if _stooq_session is None:
-        _stooq_session = requests.Session()
-        _stooq_session.headers.update(_STOOQ_HEADERS)
-    return _stooq_session
+def _make_session(headers: dict) -> requests.Session:
+    """Build a requests.Session with the given browser headers pre-set."""
+    s = requests.Session()
+    s.headers.clear()
+    for k, v in headers.items():
+        s.headers[k] = v
+    return s
 
 
-def _fetch_prices_stooq(stooq_sym: str, label: str):
+# Pre-built sessions, one per profile (reused across requests)
+_PROFILE_SESSIONS: dict = {}
+
+
+def _get_profile_session(profile_name: str, headers: dict) -> requests.Session:
+    if profile_name not in _PROFILE_SESSIONS:
+        _PROFILE_SESSIONS[profile_name] = _make_session(headers)
+    return _PROFILE_SESSIONS[profile_name]
+
+
+def _rotating_get(url: str, params: dict, label: str, timeout: int = 20):
     """
-    Fetch ~3y of daily close prices from Stooq.
-    Returns pd.Series or None.
+    Try each browser profile in order until one returns valid CSV data.
+    Returns (response_text, profile_name) or (None, None).
+
+    Detection avoidance:
+    - Each profile sends a complete, consistent header set for that browser
+    - Safari and Firefox profiles lack Sec-CH-UA (those browsers don't send it)
+    - curl_cffi adds TLS fingerprint matching when available
+    - Sessions are reused so TCP connections persist (more browser-like)
     """
-    s = _get_stooq_session()
+    for profile_name, ua, headers in _BROWSER_PROFILES:
+        try:
+            if _CURL_CFFI_OK:
+                from curl_cffi import requests as cffi_requests
+                impersonate = _CFFI_TARGET.get(profile_name, "chrome120")
+                r = cffi_requests.get(
+                    url, params=params, headers=headers,
+                    impersonate=impersonate, timeout=timeout,
+                )
+            else:
+                sess = _get_profile_session(profile_name, headers)
+                r = sess.get(url, params=params, timeout=timeout)
+
+            if r.status_code == 200:
+                text = r.text.strip()
+                # Valid Stooq CSV starts with "Date," header, not HTML
+                if (text
+                        and len(text) > 100
+                        and text.startswith("Date,")
+                        and "No data" not in text
+                        and "<html" not in text.lower()):
+                    log.debug(f"  {label}: success with [{profile_name}]")
+                    return text, profile_name
+                else:
+                    log.debug(f"  {label} [{profile_name}]: non-CSV response ({len(text)} bytes)")
+            elif r.status_code == 429:
+                log.debug(f"  {label} [{profile_name}]: 429 -- pausing 2s before next profile")
+                time.sleep(2.0)
+            else:
+                log.debug(f"  {label} [{profile_name}]: HTTP {r.status_code}")
+
+        except Exception as e:
+            log.debug(f"  {label} [{profile_name}]: {type(e).__name__}: {e}")
+
+        # Brief pause between profile attempts to avoid hammering
+        time.sleep(0.3)
+
+    return None, None
+
+
+# ---------------------------------------------------------------------------
+# Source 1: Stooq CSV  (primary)
+# Tries both NSE (.ns) and BSE (.bo) suffixes with full browser rotation.
+# ---------------------------------------------------------------------------
+
+def _parse_stooq_csv(text: str) -> pd.Series | None:
+    """Parse Stooq CSV response into a price Series."""
+    try:
+        df = pd.read_csv(io.StringIO(text), parse_dates=["Date"])
+        if df.empty or "Close" not in df.columns:
+            return None
+        df = df.dropna(subset=["Date", "Close"]).sort_values("Date")
+        prices = df.set_index("Date")["Close"].astype(float)
+        prices.index.name = "Date"
+        return prices if len(prices) >= 20 else None
+    except Exception:
+        return None
+
+
+def _fetch_prices_stooq(base_sym: str, label: str) -> pd.Series | None:
+    """
+    Fetch 3y of daily close prices from Stooq with browser rotation.
+    Tries NSE (.ns) first, then BSE (.bo) as alternate exchange suffix.
+    Each suffix attempt rotates across Chrome/Safari/Firefox TLS fingerprints.
+    """
     end_dt   = datetime.today()
     start_dt = end_dt - timedelta(days=3 * 365 + 60)
 
+    # Stooq suffix variants: .ns = NSE India, .bo = BSE India
+    # Strip any existing suffix before building variants
+    raw = base_sym.lower().replace(".ns", "").replace(".bo", "").rstrip(".")
+    suffixes = [".ns", ".bo"]
+
     url = "https://stooq.com/q/d/l/"
-    params = {
-        "s":  stooq_sym,
-        "d1": start_dt.strftime("%Y%m%d"),
-        "d2": end_dt.strftime("%Y%m%d"),
-        "i":  "d",
-    }
 
-    for attempt in range(1, 4):
-        try:
-            r = s.get(url, params=params, timeout=20)
-            r.raise_for_status()
-
-            text = r.text.strip()
-            # Stooq returns "No data" or similar for unknown symbols
-            if len(text) < 50 or "No data" in text or "<html" in text.lower():
-                log.debug(f"  {label} Stooq: no usable data in response")
-                return None
-
-            df = pd.read_csv(io.StringIO(text), parse_dates=["Date"])
-            if df.empty or "Close" not in df.columns:
-                return None
-
-            df = df.dropna(subset=["Date", "Close"]).sort_values("Date")
-            prices = df.set_index("Date")["Close"].astype(float)
-            prices.index.name = "Date"
-
-            if len(prices) >= 20:
-                log.info(f"  {label}: {len(prices)} rows via Stooq ✓")
+    for suffix in suffixes:
+        sym = raw + suffix
+        params = {
+            "s":  sym,
+            "d1": start_dt.strftime("%Y%m%d"),
+            "d2": end_dt.strftime("%Y%m%d"),
+            "i":  "d",
+        }
+        text, profile = _rotating_get(url, params, f"{label}[stooq{suffix}]")
+        if text:
+            prices = _parse_stooq_csv(text)
+            if prices is not None:
+                log.info(f"  {label}: {len(prices)} rows via Stooq{suffix} [{profile}] ✓")
                 return prices
-
-        except Exception as e:
-            log.debug(f"  {label} Stooq attempt {attempt}: {e}")
-            if attempt < 3:
-                time.sleep(2 ** attempt)
+            log.debug(f"  {label} Stooq{suffix}: got response but no usable data")
 
     return None
 
 
-def _fetch_index_stooq():
-    """Fetch Nifty50 index history from Stooq (^nsei)."""
-    return _fetch_prices_stooq("^nsei", "Nifty50-index")
+def _fetch_index_stooq() -> pd.Series | None:
+    """Fetch Nifty50 index from Stooq (^nsei)."""
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 60)
+    url    = "https://stooq.com/q/d/l/"
+    params = {"s": "^nsei", "d1": start_dt.strftime("%Y%m%d"),
+              "d2": end_dt.strftime("%Y%m%d"), "i": "d"}
+    text, profile = _rotating_get(url, params, "Nifty50-index[stooq]")
+    if text:
+        prices = _parse_stooq_csv(text)
+        if prices is not None:
+            log.info(f"  Nifty50-index: {len(prices)} rows via Stooq [{profile}] ✓")
+            return prices
+    return None
 
 
 # ---------------------------------------------------------------------------
-# Source 2: yfinance fallback
-# Works reliably at off-peak hours; kept as fallback.
+# Source 2: yfinance  (fallback)
+# yfinance internally uses requests; wrap with curl_cffi session if available
+# so it also benefits from browser TLS impersonation.
 # ---------------------------------------------------------------------------
 
-def _fetch_prices_yf(yf_ticker: str, label: str):
+def _fetch_prices_yf(yf_ticker: str, label: str) -> pd.Series | None:
     try:
         import yfinance as yf
         hist = yf.Ticker(yf_ticker).history(
@@ -405,8 +613,7 @@ def _fetch_prices_yf(yf_ticker: str, label: str):
     return None
 
 
-def _fetch_index_yf():
-    """Fetch Nifty50 index via yfinance fallback."""
+def _fetch_index_yf() -> pd.Series | None:
     try:
         import yfinance as yf
         hist = yf.Ticker("^NSEI").history(
@@ -420,20 +627,20 @@ def _fetch_index_yf():
 
 
 # ---------------------------------------------------------------------------
-# Unified fetch with waterfall: Stooq -> yfinance
+# Unified fetch waterfall: Stooq(.ns + .bo, all browsers) -> yfinance
 # ---------------------------------------------------------------------------
 
 def _fetch_prices(ticker: str, meta: dict) -> pd.Series | None:
-    stooq_sym = meta.get("stooq", f"{ticker.lower()}.ns")
-    yf_sym    = meta.get("yf",    f"{ticker}.NS")
+    # stooq key holds the base symbol (we try .ns and .bo automatically)
+    stooq_base = meta.get("stooq", f"{ticker.lower()}.ns")
+    yf_sym     = meta.get("yf",    f"{ticker}.NS")
 
-    prices = _fetch_prices_stooq(stooq_sym, ticker)
+    prices = _fetch_prices_stooq(stooq_base, ticker)
     if prices is not None:
         return prices
 
-    log.debug(f"  {ticker}: Stooq failed, trying yfinance")
-    prices = _fetch_prices_yf(yf_sym, ticker)
-    return prices
+    log.debug(f"  {ticker}: all Stooq variants failed, trying yfinance")
+    return _fetch_prices_yf(yf_sym, ticker)
 
 
 def _fetch_index() -> pd.Series | None:

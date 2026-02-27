@@ -1,13 +1,15 @@
 # Agent_Trader -- Avito stack
 # GitHub Actions + Streamlit Cloud
 
-# Data
-# Stooq is the primary source (plain HTTP CSV, no IP blocking)
-# yfinance is the fallback (works at off-peak hours)
+# Data fetching
+# curl_cffi: TLS browser impersonation for Stooq (Chrome/Safari/Firefox rotation)
+# yfinance:  fallback data source
+# requests:  plain HTTP for non-fingerprinted calls
 pandas==2.2.3
 numpy==1.26.4
 requests==2.32.3
 yfinance==0.2.54
+curl_cffi==0.6.4
 
 # Encryption + GitHub API
 cryptography==42.0.8
