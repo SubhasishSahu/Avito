@@ -176,7 +176,7 @@ print()
 TEST_SYMBOL = "HDFCBANK"
 BSE_SCRIP   = "500180"   # HDFCBANK BSE scrip code
 end_dt      = datetime.today()
-start_dt    = end_dt - timedelta(days=30)
+start_dt    = end_dt - timedelta(days=365)  # full year -- 30 days can return empty
 
 # ── 4a. BSE India (with session cookie handshake) ────────────────
 print("  [BSE India API -- with session handshake]")
@@ -224,15 +224,23 @@ try:
         print(f"    Body[:150]: {r.text[:150].replace(chr(10),' ')}")
 
         if r.status_code == 200 and r.text.strip().startswith("{"):
+            import json as _json
             data = r.json()
-            rows = data.get("Data") or data.get("data") or []
-            if rows:
+            raw  = data.get("Data") or data.get("data") or "[]"
+            rows = _json.loads(raw) if isinstance(raw, str) else raw
+            n    = len(rows) if isinstance(rows, list) else 0
+            print(f"    Parsed: Data type={type(raw).__name__!r}, rows={n}")
+            if n >= 20:
                 record("BSE India API", True,
-                       f"{len(rows)} data points for HDFCBANK (scrip {BSE_SCRIP}) ✓ SESSION HANDSHAKE WORKS")
+                       f"{n} OHLCV rows for HDFCBANK ✓ SESSION + PARSER WORKING")
+            elif n > 0:
+                record("BSE India API", False,
+                       f"Only {n} rows (need ≥20). Widen date range.",
+                       "BSE StockReachGraph may throttle per-IP. Try a 1-year range.")
             else:
                 record("BSE India API", False,
-                       f"HTTP 200 JSON but empty data. Keys: {list(data.keys())}",
-                       "Try different date range or check BSE API structure has changed")
+                       f"0 rows after json.loads(). Raw Data: {str(raw)[:100]}",
+                       "BSE accessible but no data returned. Check scrip code and date range.")
         elif r.status_code == 200 and "<html" in r.text.lower():
             record("BSE India API", False,
                    "Still getting HTML after handshake -- session cookies may have expired or wrong endpoint",
@@ -261,14 +269,11 @@ try:
         import pandas as pd
         record("Stooq", True, f"{len(pd.read_csv(io.StringIO(r.text)))} rows")
     elif "No data" in r.text:
-        record("Stooq", False,
-               f"'No data' -- permanent Apache IP block for Azure/AWS/GCP ranges. "
-               "Browser rotation ineffective (IP-based, not fingerprint-based).",
-               "Expected failure. BSE India API is the replacement.")
+        warn("Stooq 'No data': expected permanent Apache IP block (Azure/AWS/GCP). BSE is the replacement.")
     else:
-        record("Stooq", False, f"HTTP {r.status_code} | {body[:100]}")
+        warn(f"Stooq: HTTP {r.status_code} | {body[:100]}")
 except Exception as e:
-    record("Stooq", False, f"{type(e).__name__}: {e}")
+    warn(f"Stooq: {type(e).__name__}: {e}")
 
 # ── 4d. yfinance query1 ──────────────────────────────────────────
 print()
@@ -308,13 +313,11 @@ try:
         else:
             record("Yahoo/query2", False, "HTTP 200 but no close prices")
     elif r.status_code == 429:
-        record("Yahoo/query2", False,
-               "429 -- query2 also rate-limited (same IP-level limit as query1)",
-               "Both Yahoo subdomains share the same IP rate limit counter.")
+        warn("Yahoo/query2: 429 -- same rate limit pool as query1. Expected.")
     else:
-        record("Yahoo/query2", False, f"HTTP {r.status_code}: {r.text[:150]}")
+        warn(f"Yahoo/query2: HTTP {r.status_code}")
 except Exception as e:
-    record("Yahoo/query2", False, f"{type(e).__name__}: {e}")
+    warn(f"Yahoo/query2: {type(e).__name__}: {e}")
 
 
 # ────────────────────────────────────────────────────────────────
@@ -333,10 +336,12 @@ try:
     stooq_ok  = any(n == "Stooq data source"  and p for n, p, _ in RESULTS)
     yf_ok     = any(n == "yfinance data source" and p for n, p, _ in RESULTS)
 
-    if not (fmp_ok or stooq_ok or yf_ok):
+    bse_ok  = any(n == "BSE India API"   and p for n, p, _ in RESULTS)
+    yf_ok   = any(n == "yfinance/query1" and p for n, p, _ in RESULTS)
+    if not (bse_ok or yf_ok):
         record("Mini harvest", False,
-               "All data sources failed -- no point running mini harvest",
-               "Fix at least one data source above first")
+               "BSE India API and yfinance/query1 both failed -- no working data source",
+               "Fix BSE India API (primary) or run at off-peak hours for yfinance")
     else:
         working = "FMP" if fmp_ok else ("Stooq" if stooq_ok else "yfinance")
         print(f"  Using {working} as working source")

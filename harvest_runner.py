@@ -652,22 +652,25 @@ def _fetch_prices_bse(nse_symbol: str, label: str) -> "pd.Series | None":
         r = sess.get(url, params=params, timeout=20)
         if r.status_code == 200:
             data = r.json()
-            # BSE returns {"Data": [[timestamp_ms, open, high, low, close, vol], ...]}
-            rows = data.get("Data") or data.get("data") or []
-            if rows:
+            # BSE returns {"Data": "[[timestamp_ms,open,high,low,close,vol],...]"}
+            # IMPORTANT: Data value is a JSON-encoded STRING -- must json.loads() it
+            import json as _json
+            raw  = data.get("Data") or data.get("data") or "[]"
+            rows = _json.loads(raw) if isinstance(raw, str) else raw
+            if rows and isinstance(rows, list):
                 dates  = [pd.Timestamp(row[0], unit="ms") for row in rows]
                 closes = [float(row[4]) for row in rows]
                 prices = pd.Series(closes, index=dates, name="Close")
                 prices.index.name = "Date"
                 prices = prices.sort_index()
                 if len(prices) >= 20:
-                    log.info(f"  {label}: {len(prices)} rows via BSE/raw ✓")
+                    log.info(f"  {label}: {len(prices)} rows via BSE ✓")
                     return prices
-            log.debug(f"  {label} BSE/raw: empty data. Response: {str(data)[:200]}")
+            log.debug(f"  {label} BSE: {len(rows) if isinstance(rows,list) else 0} rows. Keys: {list(data.keys())}")
         else:
-            log.debug(f"  {label} BSE/raw: HTTP {r.status_code}")
+            log.debug(f"  {label} BSE: HTTP {r.status_code}")
     except Exception as e:
-        log.debug(f"  {label} BSE/raw: {type(e).__name__}: {e}")
+        log.debug(f"  {label} BSE: {type(e).__name__}: {e}")
 
     return None
 
@@ -689,8 +692,10 @@ def _fetch_index_bse() -> "pd.Series | None":
             "seriesid": "EQ",
         }, timeout=20)
         if r.status_code == 200:
-            rows = r.json().get("Data", [])
-            if rows:
+            import json as _json
+            raw  = r.json().get("Data", "[]")
+            rows = _json.loads(raw) if isinstance(raw, str) else raw
+            if rows and isinstance(rows, list):
                 dates  = [pd.Timestamp(row[0], unit="ms") for row in rows]
                 closes = [float(row[4]) for row in rows]
                 prices = pd.Series(closes, index=dates).sort_index()
