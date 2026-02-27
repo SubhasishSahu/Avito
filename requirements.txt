@@ -11,7 +11,7 @@ numpy==1.26.4
 requests==2.32.3
 yfinance==0.2.54
 curl_cffi==0.6.4
-jugaad-trader==0.2.17
+# jugaad-trader==0.2.17
 
 # Encryption + GitHub API
 cryptography==42.0.8
