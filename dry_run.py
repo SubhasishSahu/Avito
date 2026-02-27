@@ -166,132 +166,146 @@ except Exception as e:
 
 
 # ────────────────────────────────────────────────────────────────
-# TEST 4: Data source probes (1 stock each, full header inspection)
+# TEST 4: Data source probes (1 stock each, exact response logged)
 # ────────────────────────────────────────────────────────────────
 print()
 print("── TEST 4: Data Source Probes ───────────────────────────────")
 print("   (probing each source with HDFCBANK -- one request each)")
 print()
 
-TEST_SYMBOL    = "HDFCBANK"
-end_dt         = datetime.today()
-start_dt       = end_dt - timedelta(days=30)   # 30 days only for probe
+TEST_SYMBOL = "HDFCBANK"
+BSE_SCRIP   = "500180"   # HDFCBANK BSE scrip code
+end_dt      = datetime.today()
+start_dt    = end_dt - timedelta(days=30)
 
-# ── 4a. FMP ──────────────────────────────────────────────────────
-print("  [FMP]")
-if not FMP_API_KEY:
-    warn("FMP_API_KEY not set -- skipping FMP probe")
-else:
-    try:
-        fmp_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{TEST_SYMBOL}.NS"
-        r = requests.get(fmp_url,
-                         params={"from": start_dt.strftime("%Y-%m-%d"),
-                                 "to":   end_dt.strftime("%Y-%m-%d"),
-                                 "apikey": FMP_API_KEY},
-                         headers={"User-Agent": "Agent_Trader/1.0"},
-                         timeout=15)
-        print(f"    HTTP {r.status_code} | Content-Type: {r.headers.get('Content-Type','?')[:50]}")
-
-        if r.status_code == 200:
+# ── 4a. BSE India direct API ─────────────────────────────────────
+print("  [BSE India direct API]")
+try:
+    bse_sess = requests.Session()
+    bse_sess.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer":    "https://www.bseindia.com",
+        "Accept":     "application/json, text/plain, */*",
+        "Origin":     "https://www.bseindia.com",
+    })
+    r = bse_sess.get(
+        "https://api.bseindia.com/BseIndiaAPI/api/StockReachGraph/w",
+        params={"scripcode": BSE_SCRIP, "flag": "1",
+                "fromdate": start_dt.strftime("%Y%m%d"),
+                "todate":   end_dt.strftime("%Y%m%d"),
+                "seriesid": "EQ"},
+        timeout=15)
+    print(f"    HTTP {r.status_code} | Server: {r.headers.get('Server','?')[:30]} | CF-Ray: {r.headers.get('CF-Ray','none')}")
+    print(f"    Body[:200]: {r.text[:200].replace(chr(10),' ')}")
+    if r.status_code == 200:
+        try:
             data = r.json()
-            hist = data.get("historical", [])
-            if hist:
-                record("FMP data source", True,
-                       f"{len(hist)} rows for {TEST_SYMBOL}.NS | latest close: {hist[0].get('close')}")
-                # Check quota header
-                remaining = r.headers.get("X-RateLimit-Remaining", "?")
-                if remaining != "?":
-                    print(f"    API quota remaining: {remaining}/day")
+            rows = data.get("Data") or data.get("data") or []
+            if rows:
+                record("BSE India API", True, f"{len(rows)} data points for HDFCBANK (scrip {BSE_SCRIP})")
             else:
-                record("FMP data source", False,
-                       f"HTTP 200 but no historical data. Response: {json.dumps(data)[:200]}",
-                       f"Check symbol format -- try {TEST_SYMBOL}.BO (BSE) if .NS fails")
-        elif r.status_code == 401:
-            record("FMP data source", False, "401 -- API key invalid",
-                   "Regenerate key at financialmodelingprep.com and update FMP_API_KEY secret")
-        elif r.status_code == 403:
-            record("FMP data source", False, "403 -- endpoint not available on free tier",
-                   "NSE data requires the Starter plan ($19/mo). Use FMP with BSE symbols or switch to Twelve Data.")
-        else:
-            record("FMP data source", False,
-                   f"HTTP {r.status_code}: {r.text[:200]}")
-    except Exception as e:
-        record("FMP data source", False, f"{type(e).__name__}: {e}")
+                record("BSE India API", False,
+                       f"HTTP 200 but empty. Keys: {list(data.keys())}",
+                       "BSE API structure may have changed -- check bseindia.com network tab")
+        except Exception as je:
+            record("BSE India API", False, f"JSON parse error: {je} | body: {r.text[:100]}")
+    elif r.status_code == 403:
+        record("BSE India API", False, "403 Forbidden",
+               "Add stronger Referer/Origin headers or test jugaad-trader wrapper")
+    else:
+        record("BSE India API", False, f"HTTP {r.status_code}: {r.text[:150]}")
+except Exception as e:
+    record("BSE India API", False, f"{type(e).__name__}: {e}",
+           "Network-level block. BSE API may not be reachable from GitHub Actions IPs.")
 
-# ── 4b. Stooq ────────────────────────────────────────────────────
+# ── 4b. jugaad-trader (BSE Python wrapper) ───────────────────────
+print()
+print("  [jugaad-trader]")
+try:
+    from jugaad_trader.stockdata import StockDataBse
+    df = StockDataBse.stock_data_raw(BSE_SCRIP, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d"))
+    if df is not None and not df.empty:
+        record("jugaad-trader", True, f"{len(df)} rows for HDFCBANK")
+    else:
+        record("jugaad-trader", False, "Empty response",
+               "jugaad-trader wraps the same BSE API -- if BSE API fails, this will too")
+except ImportError:
+    record("jugaad-trader", False, "Not installed",
+           "Add jugaad-trader==0.2.17 to requirements.txt")
+except Exception as e:
+    record("jugaad-trader", False, f"{type(e).__name__}: {e}")
+
+# ── 4c. Stooq ────────────────────────────────────────────────────
 print()
 print("  [Stooq]")
 try:
-    stooq_url = "https://stooq.com/q/d/l/"
-    # Try Safari UA first (most likely to work if UA-based)
-    safari_headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-GB,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    }
-    r = requests.get(stooq_url,
+    r = requests.get("https://stooq.com/q/d/l/",
                      params={"s": f"{TEST_SYMBOL.lower()}.ns",
                              "d1": start_dt.strftime("%Y%m%d"),
-                             "d2": end_dt.strftime("%Y%m%d"),
-                             "i": "d"},
-                     headers=safari_headers, timeout=15)
-
-    cf_ray    = r.headers.get("CF-Ray", "")
-    cf_server = r.headers.get("Server", "")
-    is_cf     = bool(cf_ray) or "cloudflare" in cf_server.lower()
-    body_prev = r.text[:200].replace("\n", " ").strip()
-
-    print(f"    HTTP {r.status_code} | Server: {cf_server[:30]} | CF-Ray: {cf_ray or 'none'}")
-    print(f"    Content-Type: {r.headers.get('Content-Type', '?')[:60]}")
-    print(f"    Body[:200]: {body_prev}")
-
+                             "d2": end_dt.strftime("%Y%m%d"), "i": "d"},
+                     headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"},
+                     timeout=15)
+    body = r.text[:200].replace("\n", " ").strip()
+    print(f"    HTTP {r.status_code} | Server: {r.headers.get('Server','?')[:20]} | CF-Ray: {r.headers.get('CF-Ray','none')}")
+    print(f"    Body[:200]: {body}")
     if r.status_code == 200 and r.text.strip().startswith("Date,"):
         import pandas as pd
-        df = pd.read_csv(io.StringIO(r.text))
-        record("Stooq data source", True,
-               f"{len(df)} rows for {TEST_SYMBOL}.ns (Safari UA)")
-    elif is_cf and r.status_code in (403, 503):
-        record("Stooq data source", False,
-               f"Cloudflare Bot Fight Mode (CF-Ray: {cf_ray})",
-               "Stooq is Cloudflare-protected. FMP with API key is the reliable alternative.")
-    elif is_cf and r.status_code == 200 and "<html" in r.text.lower():
-        record("Stooq data source", False,
-               f"Cloudflare JS challenge page (CF-Ray: {cf_ray})",
-               "cf_clearance cookie required -- not feasible from GitHub Actions. Use FMP instead.")
-    elif r.status_code == 200 and "No data" in r.text:
-        record("Stooq data source", False,
-               "HTTP 200 but 'No data' -- symbol not found or soft block",
-               "Try different symbol format or check stooq.com manually")
+        record("Stooq", True, f"{len(pd.read_csv(io.StringIO(r.text)))} rows")
+    elif "No data" in r.text:
+        record("Stooq", False,
+               f"'No data' -- permanent Apache IP block for Azure/AWS/GCP ranges. "
+               "Browser rotation ineffective (IP-based, not fingerprint-based).",
+               "Expected failure. BSE India API is the replacement.")
     else:
-        record("Stooq data source", False,
-               f"HTTP {r.status_code} | CF: {'yes' if is_cf else 'no'} | body: {body_prev[:100]}")
+        record("Stooq", False, f"HTTP {r.status_code} | {body[:100]}")
 except Exception as e:
-    record("Stooq data source", False, f"{type(e).__name__}: {e}")
+    record("Stooq", False, f"{type(e).__name__}: {e}")
 
-# ── 4c. yfinance ─────────────────────────────────────────────────
+# ── 4d. yfinance query1 ──────────────────────────────────────────
 print()
-print("  [yfinance]")
+print("  [yfinance/query1]")
 try:
     import yfinance as yf
-    ticker = yf.Ticker(f"{TEST_SYMBOL}.NS")
-    hist   = ticker.history(period="5d", auto_adjust=True, actions=False, timeout=15)
+    hist = yf.Ticker(f"{TEST_SYMBOL}.NS").history(period="5d", timeout=15)
     if hist is not None and not hist.empty:
-        record("yfinance data source", True,
-               f"{len(hist)} rows for {TEST_SYMBOL}.NS | latest: {hist['Close'].iloc[-1]:.2f}")
+        record("yfinance/query1", True, f"{len(hist)} rows | latest: {hist['Close'].iloc[-1]:.2f}")
     else:
-        record("yfinance data source", False,
-               "Empty response -- rate limited or blocked at this time",
-               "yfinance works at midnight IST (18:30 UTC). Schedule-only is reliable.")
+        record("yfinance/query1", False, "Empty response",
+               "Rate limited. GitHub Actions shared IPs exhaust Yahoo's pool quickly.")
 except Exception as e:
     err = str(e)
-    if "429" in err or "Too Many" in err.lower():
-        record("yfinance data source", False,
-               "429 Too Many Requests -- blocked from this IP at this time",
-               "yfinance only works at off-peak hours from GitHub Actions IPs")
+    if "429" in err or "RateLimit" in err:
+        record("yfinance/query1", False,
+               "YFRateLimitError -- Yahoo rate-limits GitHub Actions shared IPs. "
+               "No safe time window -- the IP pool is always busy.",
+               "Use BSE India API as primary. yfinance is unreliable from Actions.")
     else:
-        record("yfinance data source", False, f"{type(e).__name__}: {err[:150]}")
+        record("yfinance/query1", False, f"{type(e).__name__}: {err[:150]}")
+
+# ── 4e. Yahoo query2 subdomain ────────────────────────────────────
+print()
+print("  [Yahoo query2 subdomain]")
+try:
+    sess2 = requests.Session()
+    sess2.headers.update({"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15"})
+    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{TEST_SYMBOL}.NS"
+    r = sess2.get(url, params={"interval": "1d", "range": "5d", "includePrePost": "false"}, timeout=15)
+    print(f"    HTTP {r.status_code} | Server: {r.headers.get('Server','?')[:30]}")
+    if r.status_code == 200:
+        closes = r.json().get("chart",{}).get("result",[{}])[0].get("indicators",{}).get("quote",[{}])[0].get("close",[])
+        closes = [c for c in closes if c is not None]
+        if closes:
+            record("Yahoo/query2", True, f"{len(closes)} closes | latest: {closes[-1]:.2f}")
+        else:
+            record("Yahoo/query2", False, "HTTP 200 but no close prices")
+    elif r.status_code == 429:
+        record("Yahoo/query2", False,
+               "429 -- query2 also rate-limited (same IP-level limit as query1)",
+               "Both Yahoo subdomains share the same IP rate limit counter.")
+    else:
+        record("Yahoo/query2", False, f"HTTP {r.status_code}: {r.text[:150]}")
+except Exception as e:
+    record("Yahoo/query2", False, f"{type(e).__name__}: {e}")
 
 
 # ────────────────────────────────────────────────────────────────

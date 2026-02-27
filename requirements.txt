@@ -2,14 +2,16 @@
 # GitHub Actions + Streamlit Cloud
 
 # Data fetching
-# curl_cffi: TLS browser impersonation for Stooq (Chrome/Safari/Firefox rotation)
-# yfinance:  fallback data source
-# requests:  plain HTTP for non-fingerprinted calls
+# jugaad-trader: BSE India public API (primary -- no key, no IP blocks)
+# yfinance:      fallback data source (works at off-peak)
+# curl_cffi:     TLS browser impersonation (Safari/Firefox/Chrome rotation)
+# requests:      plain HTTP
 pandas==2.2.3
 numpy==1.26.4
 requests==2.32.3
 yfinance==0.2.54
 curl_cffi==0.6.4
+jugaad-trader==0.2.17
 
 # Encryption + GitHub API
 cryptography==42.0.8

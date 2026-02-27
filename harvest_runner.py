@@ -523,6 +523,161 @@ def _rotating_get(url: str, params: dict, label: str, timeout: int = 20):
 
 
 # ---------------------------------------------------------------------------
+# Source 0: BSE India direct API  (no key, no Cloudflare, public endpoint)
+#
+# BSE India serves historical data from their own API (used by bseindia.com).
+# No API key required. No Cloudflare. Datacenter IPs are not blocked.
+#
+# Two approaches tried in order:
+#   A. jugaad_trader package  -- clean Python wrapper around BSE's API
+#   B. BSE raw HTTP API       -- direct call to api.bseindia.com
+#
+# Symbol mapping: NSE ticker -> BSE scrip code (6-digit number)
+# ---------------------------------------------------------------------------
+
+# NSE ticker -> BSE scrip code mapping (top holdings + Nifty50)
+_BSE_SCRIP = {
+    "HDFCBANK": "500180", "ICICIBANK": "532174", "KOTAKBANK": "500247",
+    "AXISBANK": "532215", "SBIN": "500112", "BAJFINANCE": "500034",
+    "BAJAJFINSV": "532978", "HDFCLIFE": "540777", "SBILIFE": "540719",
+    "INDUSINDBK": "532187", "TCS": "532540", "INFY": "500209",
+    "HCLTECH": "532281", "WIPRO": "507685", "TECHM": "532755",
+    "LTIM": "540005", "RELIANCE": "500325", "ONGC": "500312",
+    "BPCL": "500547", "COALINDIA": "533278", "POWERGRID": "532898",
+    "NTPC": "532555", "HINDUNILVR": "500696", "ITC": "500875",
+    "NESTLEIND": "500790", "BRITANNIA": "500825", "TATACONSUM": "500800",
+    "TITAN": "500114", "ASIANPAINT": "500820", "ZOMATO": "543320",
+    "MARUTI": "532500", "BAJAJ-AUTO": "532977", "HEROMOTOCO": "500182",
+    "EICHERMOT": "505200", "M&M": "500520", "TATAMOTORS": "500570",
+    "SUNPHARMA": "524715", "DRREDDY": "500124", "CIPLA": "500087",
+    "DIVISLAB": "532488", "APOLLOHOSP": "508869", "TATASTEEL": "500470",
+    "JSWSTEEL": "500228", "HINDALCO": "500440", "ADANIENT": "512599",
+    "LT": "500510", "ADANIPORTS": "532921", "ULTRACEMCO": "532538",
+    "GRASIM": "500300", "BHARTIARTL": "532454",
+    # User holdings
+    "ADANIGREEN": "541450", "AUBANK": "540611", "BDL": "541143",
+    "BHARATFORG": "500493", "BHEL": "500103", "CAMS": "543232",
+    "ENGINERSIN": "532535", "GPPL": "533248", "HAL": "541154",
+    "HEG": "509631", "HINDCOPPER": "513599", "IONEXCHANGE": "500214",
+    "IRCTC": "542830", "IREDA": "544225", "JIOFIN": "543940",
+    "LAURUSLABS": "540222", "MAZDOCK": "543237", "NATIONALUM": "532234",
+    "NMDC": "526371", "PARAS": "530647", "PFC": "532810",
+    "RECLTD": "532955", "RVNL": "542649", "SPANDANA": "542759",
+    "TATATECH": "544028", "TRITURBINE": "533655",
+}
+
+_bse_session = None
+
+
+def _get_bse_session() -> requests.Session:
+    global _bse_session
+    if _bse_session is None:
+        _bse_session = requests.Session()
+        _bse_session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer":    "https://www.bseindia.com",
+            "Accept":     "application/json, text/plain, */*",
+            "Origin":     "https://www.bseindia.com",
+        })
+    return _bse_session
+
+
+def _fetch_prices_bse(nse_symbol: str, label: str) -> "pd.Series | None":
+    """
+    Fetch historical close prices from BSE India's public API.
+    Uses BSE scrip codes mapped from NSE ticker symbols.
+    No API key required. No IP blocking observed from datacenter IPs.
+    """
+    scrip = _BSE_SCRIP.get(nse_symbol.upper())
+    if not scrip:
+        log.debug(f"  {label}: no BSE scrip code mapping -- skipping BSE source")
+        return None
+
+    end_dt   = datetime.today()
+    start_dt = end_dt - timedelta(days=3 * 365 + 60)
+
+    # Try jugaad-trader first (cleaner interface)
+    try:
+        from jugaad_trader.stockdata import StockDataBse
+        df = StockDataBse.stock_data_raw(
+            scrip, start_dt.strftime("%Y%m%d"), end_dt.strftime("%Y%m%d")
+        )
+        if df is not None and not df.empty and "CLOSE" in df.columns:
+            prices = df.set_index("DATE")["CLOSE"].astype(float).sort_index()
+            prices.index = pd.to_datetime(prices.index)
+            prices.index.name = "Date"
+            if len(prices) >= 20:
+                log.info(f"  {label}: {len(prices)} rows via BSE/jugaad ✓")
+                return prices
+    except Exception as e:
+        log.debug(f"  {label} BSE/jugaad: {type(e).__name__}: {e}")
+
+    # Fallback: BSE raw HTTP API
+    try:
+        sess = _get_bse_session()
+        url  = "https://api.bseindia.com/BseIndiaAPI/api/StockReachGraph/w"
+        params = {
+            "scripcode": scrip,
+            "flag":      "1",
+            "fromdate":  start_dt.strftime("%Y%m%d"),
+            "todate":    end_dt.strftime("%Y%m%d"),
+            "seriesid":  "EQ",
+        }
+        r = sess.get(url, params=params, timeout=20)
+        if r.status_code == 200:
+            data = r.json()
+            # BSE returns {"Data": [[timestamp_ms, open, high, low, close, vol], ...]}
+            rows = data.get("Data") or data.get("data") or []
+            if rows:
+                dates  = [pd.Timestamp(row[0], unit="ms") for row in rows]
+                closes = [float(row[4]) for row in rows]
+                prices = pd.Series(closes, index=dates, name="Close")
+                prices.index.name = "Date"
+                prices = prices.sort_index()
+                if len(prices) >= 20:
+                    log.info(f"  {label}: {len(prices)} rows via BSE/raw ✓")
+                    return prices
+            log.debug(f"  {label} BSE/raw: empty data. Response: {str(data)[:200]}")
+        else:
+            log.debug(f"  {label} BSE/raw: HTTP {r.status_code}")
+    except Exception as e:
+        log.debug(f"  {label} BSE/raw: {type(e).__name__}: {e}")
+
+    return None
+
+
+def _fetch_index_bse() -> "pd.Series | None":
+    """Fetch Nifty50 via BSE API (Sensex as proxy, scrip 1)."""
+    # BSE Sensex index = scrip code 1
+    # For Nifty50 beta calculation we really want Nifty data
+    # Try NSE index API as alternative
+    try:
+        sess = _get_bse_session()
+        end_dt   = datetime.today()
+        start_dt = end_dt - timedelta(days=3 * 365 + 60)
+        url = "https://api.bseindia.com/BseIndiaAPI/api/StockReachGraph/w"
+        r = sess.get(url, params={
+            "scripcode": "1", "flag": "1",
+            "fromdate": start_dt.strftime("%Y%m%d"),
+            "todate":   end_dt.strftime("%Y%m%d"),
+            "seriesid": "EQ",
+        }, timeout=20)
+        if r.status_code == 200:
+            rows = r.json().get("Data", [])
+            if rows:
+                dates  = [pd.Timestamp(row[0], unit="ms") for row in rows]
+                closes = [float(row[4]) for row in rows]
+                prices = pd.Series(closes, index=dates).sort_index()
+                prices.index.name = "Date"
+                if len(prices) >= 20:
+                    log.info(f"  Index: {len(prices)} rows via BSE ✓")
+                    return prices
+    except Exception as e:
+        log.debug(f"  Index BSE: {e}")
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Source 0: Financial Modeling Prep (FMP) -- TRUE PRIMARY
 #
 # FMP is a proper REST API with an API key (stored in GitHub Secrets as
@@ -799,38 +954,90 @@ def _fetch_index_yf() -> pd.Series | None:
 # Unified fetch waterfall: Stooq(.ns + .bo, all browsers) -> yfinance
 # ---------------------------------------------------------------------------
 
+def _fetch_prices_yf_q2(yf_ticker: str, label: str) -> "pd.Series | None":
+    """
+    yfinance via query2.finance.yahoo.com (different subdomain, separate rate limit).
+    Uses a custom requests session to override yfinance's default base_url.
+    """
+    try:
+        import yfinance as yf
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        })
+        ticker = yf.Ticker(yf_ticker, session=session)
+        # Override base_url to use query2 instead of query1
+        import yfinance.base as _yfbase
+        _orig = getattr(_yfbase, "YF_URL", None)
+        try:
+            if hasattr(_yfbase, "YF_URL"):
+                _yfbase.YF_URL = "https://query2.finance.yahoo.com"
+            hist = ticker.history(period="3y", auto_adjust=True, actions=False, timeout=20)
+        finally:
+            if _orig is not None and hasattr(_yfbase, "YF_URL"):
+                _yfbase.YF_URL = _orig
+        if hist is not None and not hist.empty and "Close" in hist.columns:
+            prices = hist["Close"].dropna()
+            prices.index = pd.to_datetime(prices.index).tz_localize(None)
+            prices.index.name = "Date"
+            if len(prices) >= 20:
+                log.info(f"  {label}: {len(prices)} rows via yfinance/q2 ✓")
+                return prices
+    except Exception as e:
+        log.debug(f"  {label} yf/q2: {type(e).__name__}: {e}")
+    return None
+
+
 def _fetch_prices(ticker: str, meta: dict) -> pd.Series | None:
     """
-    Unified waterfall:
-      0. FMP  -- proper REST API with key, guaranteed no bot block
-      1. Stooq -- multi-browser rotation (.ns then .bo suffix)
-      2. yfinance -- fallback, reliable at off-peak hours
+    Unified waterfall (first success wins):
+      0. BSE India direct API  -- free, no key, no Cloudflare
+      1. FMP                   -- free key if configured
+      2. Stooq                 -- browser rotation (IP-blocked from datacenter)
+      3. yfinance query2       -- separate rate-limit bucket from query1
+      4. yfinance query1       -- last resort
     """
     stooq_base = meta.get("stooq", f"{ticker.lower()}.ns")
     yf_sym     = meta.get("yf",    f"{ticker}.NS")
 
-    # Source 0: FMP (only if API key is configured)
+    # Source 0: BSE India (no key, no bot protection, different infra from Yahoo/Stooq)
+    prices = _fetch_prices_bse(ticker, ticker)
+    if prices is not None:
+        return prices
+    log.debug(f"  {ticker}: BSE failed, trying FMP")
+
+    # Source 1: FMP (skipped if key not set)
     if _FMP_API_KEY:
         prices = _fetch_prices_fmp(ticker, ticker)
         if prices is not None:
             return prices
         log.debug(f"  {ticker}: FMP failed, trying Stooq")
 
-    # Source 1: Stooq with multi-browser rotation
+    # Source 2: Stooq (IP-blocked from datacenter, kept as it costs nothing to try)
     prices = _fetch_prices_stooq(stooq_base, ticker)
     if prices is not None:
         return prices
 
-    # On first Stooq failure, log exactly what the server returned
+    # Diagnose Stooq failure once per run
     _run_diagnosis("https://stooq.com/q/d/l/", {"s": stooq_base, "i": "d"})
 
-    # Source 2: yfinance
-    log.debug(f"  {ticker}: Stooq failed, trying yfinance")
+    # Source 3: yfinance via query2 (separate rate-limit pool)
+    prices = _fetch_prices_yf_q2(yf_sym, ticker)
+    if prices is not None:
+        return prices
+
+    # Source 4: yfinance via query1 (original, last resort)
+    log.debug(f"  {ticker}: all sources failed, last try yfinance/q1")
     return _fetch_prices_yf(yf_sym, ticker)
 
 
 def _fetch_index() -> pd.Series | None:
-    """Nifty50 index waterfall: FMP -> Stooq -> yfinance."""
+    """Nifty50 index waterfall: BSE -> FMP -> Stooq -> yfinance."""
+    idx = _fetch_index_bse()
+    if idx is not None:
+        return idx
+
     if _FMP_API_KEY:
         idx = _fetch_index_fmp()
         if idx is not None:

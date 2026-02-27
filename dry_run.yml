@@ -1,0 +1,57 @@
+name: Agent_Trader Dry Run
+
+# Run this BEFORE deploying changes or when the main harvest fails.
+# Tests every component in ~60s without touching production data.
+
+on:
+  # Manual trigger only -- run this on demand from the Actions UI
+  workflow_dispatch:
+
+  # Optionally auto-run every Monday morning to catch config drift
+  # schedule:
+  #   - cron: "0 2 * * 1"   # Mon 07:30 IST
+
+permissions:
+  contents: write   # needed for the GitHub write test
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run dry run diagnostics
+        env:
+          FERNET_KEY:    ${{ secrets.FERNET_KEY }}
+          GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO:   SubhasishSahu/Avito
+          GITHUB_BRANCH: master
+          FMP_API_KEY:   ${{ secrets.FMP_API_KEY }}
+        run: |
+          cd $GITHUB_WORKSPACE
+          python dry_run.py
+
+      - name: Show repo state after test
+        if: always()
+        run: |
+          echo "=== db/ folder ==="
+          ls -lh db/
+          echo "=== dryrun.enc present? ==="
+          test -f db/dryrun.enc && echo "YES (will be cleaned up)" || echo "NO"
