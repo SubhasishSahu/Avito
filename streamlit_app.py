@@ -686,7 +686,18 @@ def main():
                 "Refresh the page after the Actions run completes."
             )
         else:
-            st.error("Failed to write trigger. Check GITHUB_TOKEN secret.")
+            st.error(
+                "❌ Failed to write trigger to GitHub.\n\n"
+                "**Most likely cause:** The `GITHUB_TOKEN` in Streamlit Cloud secrets "
+                "is the GitHub Actions token, which only works inside Actions — "
+                "not from external apps.\n\n"
+                "**Fix:** Create a Personal Access Token (PAT) at "
+                "[github.com/settings/tokens](https://github.com/settings/tokens) "
+                "with **Contents: Read & Write** permission for this repo, "
+                "then replace `GITHUB_TOKEN` in "
+                "Streamlit Cloud → App → Settings → Secrets with the new PAT.\n\n"
+                "The dashboard will still work with existing snapshot data."
+            )
     elif set(current_tickers) != set(prev_tickers):
         with st.spinner("Updating trigger file..."):
             trigger_harvest(current_tickers)
