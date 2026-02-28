@@ -321,78 +321,39 @@ except Exception as e:
 
 
 # ────────────────────────────────────────────────────────────────
-# TEST 5: Mini harvest (3 stocks, full analytics, write dryrun.enc)
+# TEST 5: Pipeline readiness check (no data pull — preserves IP quota)
 # ────────────────────────────────────────────────────────────────
 print()
-print("── TEST 5: Mini Harvest (3 stocks) ──────────────────────────")
-
-MINI_STOCKS = ["HDFCBANK", "TCS", "RELIANCE"]
-
-try:
-    import harvest_runner as hr
-
-    # Check which source will actually work based on test 4 results
-    fmp_ok    = any(n == "FMP data source"    and p for n, p, _ in RESULTS)
-    stooq_ok  = any(n == "Stooq data source"  and p for n, p, _ in RESULTS)
-    yf_ok     = any(n == "yfinance data source" and p for n, p, _ in RESULTS)
-
-    bse_ok  = any(n == "BSE India API"   and p for n, p, _ in RESULTS)
-    yf_ok   = any(n == "yfinance/query1" and p for n, p, _ in RESULTS)
-    if not (bse_ok or yf_ok):
-        record("Mini harvest", False,
-               "BSE India API and yfinance/query1 both failed -- no working data source",
-               "Fix BSE India API (primary) or run at off-peak hours for yfinance")
-    else:
-        working = "FMP" if fmp_ok else ("Stooq" if stooq_ok else "yfinance")
-        print(f"  Using {working} as working source")
-
-        mini_snapshot = []
-        for sym in MINI_STOCKS:
-            meta   = hr.get_ticker_meta(sym)
-            prices = hr._fetch_prices(sym, meta)
-            if prices is not None and len(prices) >= 20:
-                ret    = prices.pct_change().dropna()
-                rsi    = hr._compute_rsi(prices)
-                macd   = hr._compute_macd(prices)
-                cagr1y = hr._compute_cagr(prices, 1)
-                mini_snapshot.append({
-                    "ticker": sym,
-                    "price":  round(float(prices.iloc[-1]), 2),
-                    "rows":   len(prices),
-                    "rsi":    rsi,
-                    "macd":   macd,
-                    "cagr_1y": cagr1y,
-                })
-                print(f"  ✅ {sym}: price={prices.iloc[-1]:.2f}, RSI={rsi}, MACD={macd}, rows={len(prices)}")
-            else:
-                print(f"  ❌ {sym}: no data")
-
-        record("Mini harvest", len(mini_snapshot) > 0,
-               f"{len(mini_snapshot)}/{len(MINI_STOCKS)} stocks fetched successfully")
-
-        # Write to dryrun.enc (safe -- never overwrites snapshot.enc)
-        if mini_snapshot and GITHUB_TOKEN and FERNET_KEY:
-            ok = hr.gs.write(
-                "dryrun",
-                {"generated_at": datetime.utcnow().isoformat(),
-                 "stocks": mini_snapshot},
-                "dry_run: mini harvest test"
-            )
-            record("Write dryrun.enc", ok,
-                   "wrote db/dryrun.enc (safe -- not snapshot.enc)" if ok else "write failed")
-
-except ImportError:
-    record("Mini harvest", False,
-           "Could not import harvest_runner",
-           "Ensure harvest_runner.py is in the same directory as dry_run.py")
-except Exception as e:
-    record("Mini harvest", False, f"{type(e).__name__}: {e}\n{traceback.format_exc()[:300]}")
-
-
-# ────────────────────────────────────────────────────────────────
-# FINAL SUMMARY
-# ────────────────────────────────────────────────────────────────
+print("── TEST 5: Pipeline Readiness ───────────────────────────")
 print()
+
+# Check which sources passed in TEST 4
+bse_ok = any(n == "BSE India API"   and p for n, p, _ in RESULTS)
+yf_ok  = any(n == "yfinance/query1" and p for n, p, _ in RESULTS)
+q2_ok  = any(n == "Yahoo/query2"    and p for n, p, _ in RESULTS)
+
+any_data_source = bse_ok or yf_ok or q2_ok
+
+# Check GitHub write works (already tested in TEST 3)
+github_ok = any(n == "GitHub write (create)" and p for n, p, _ in RESULTS)
+
+if any_data_source and github_ok:
+    source_name = "BSE" if bse_ok else ("yfinance/q2" if q2_ok else "yfinance/q1")
+    record("Pipeline ready", True,
+           f"Data source ({source_name}) + GitHub write both verified. "
+           f"Safe to trigger full harvest.")
+    print(f"  NOTE: Mini-harvest intentionally removed from dry run.")
+    print(f"        Running it here would consume yfinance IP quota,")
+    print(f"        leaving the full harvest with 0 requests available.")
+elif not any_data_source:
+    record("Pipeline ready", False,
+           "No data source returned prices (BSE empty, yfinance rate-limited)",
+           "Wait for yfinance rate limit to reset (try again in 1-2 hours) "
+           "or fix BSE India API session handling.")
+else:
+    record("Pipeline ready", False,
+           "GitHub write failed — cannot store harvest results",
+           "Check GITHUB_TOKEN permissions (Contents: Read+Write required)")
 print("=" * 60)
 print("  SUMMARY")
 print("=" * 60)

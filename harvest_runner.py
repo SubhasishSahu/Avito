@@ -569,6 +569,11 @@ _BSE_SCRIP = {
 _bse_session       = None
 _bse_session_ready = False   # True once cookie handshake succeeded
 
+# Circuit breakers — set True on first 429/rate-limit, skips all subsequent calls
+# Prevents 89 × 10s = 15min wasted time when Yahoo is blocked for this IP
+_YF_Q1_BLOCKED = False  # yfinance query1 rate-limited this run
+_YF_Q2_BLOCKED = False  # yfinance query2 rate-limited this run
+
 
 def _strip_tz(prices: pd.Series) -> pd.Series:
     """Strip timezone from a Series DatetimeIndex. Always returns tz-naive.
@@ -967,6 +972,10 @@ def _fetch_index_stooq() -> pd.Series | None:
 # ---------------------------------------------------------------------------
 
 def _fetch_prices_yf(yf_ticker: str, label: str) -> pd.Series | None:
+    global _YF_Q1_BLOCKED
+    if _YF_Q1_BLOCKED:
+        log.debug(f"  {label} yf/q1: skipped (rate-limited earlier this run)")
+        return None
     try:
         import yfinance as yf
         hist = yf.Ticker(yf_ticker).history(
@@ -977,11 +986,19 @@ def _fetch_prices_yf(yf_ticker: str, label: str) -> pd.Series | None:
             log.info(f"  {label}: {len(prices)} rows via yfinance ✓")
             return prices
     except Exception as e:
-        log.debug(f"  {label} yfinance: {e}")
+        err = str(e)
+        if "429" in err or "RateLimit" in err or "Too Many" in err:
+            _YF_Q1_BLOCKED = True
+            log.warning(f"  yfinance/q1 rate-limited — disabling for this run")
+        else:
+            log.debug(f"  {label} yfinance: {e}")
     return None
 
 
 def _fetch_index_yf() -> pd.Series | None:
+    global _YF_Q1_BLOCKED
+    if _YF_Q1_BLOCKED:
+        return None
     try:
         import yfinance as yf
         hist = yf.Ticker("^NSEI").history(
@@ -990,7 +1007,12 @@ def _fetch_index_yf() -> pd.Series | None:
         if hist is not None and not hist.empty:
             return _strip_tz(hist["Close"].squeeze())
     except Exception as e:
-        log.debug(f"  Nifty50-index yfinance: {e}")
+        err = str(e)
+        if "429" in err or "RateLimit" in err or "Too Many" in err:
+            _YF_Q1_BLOCKED = True
+            log.warning("  yfinance/q1 rate-limited on index fetch — disabling for this run")
+        else:
+            log.debug(f"  Nifty50-index yfinance: {e}")
     return None
 
 
@@ -1003,6 +1025,10 @@ def _fetch_prices_yf_q2(yf_ticker: str, label: str) -> "pd.Series | None":
     yfinance via query2.finance.yahoo.com (different subdomain, separate rate limit).
     Uses a custom requests session to override yfinance's default base_url.
     """
+    global _YF_Q2_BLOCKED
+    if _YF_Q2_BLOCKED:
+        log.debug(f"  {label} yf/q2: skipped (rate-limited earlier this run)")
+        return None
     try:
         import yfinance as yf
         session = requests.Session()
@@ -1029,7 +1055,12 @@ def _fetch_prices_yf_q2(yf_ticker: str, label: str) -> "pd.Series | None":
                 log.info(f"  {label}: {len(prices)} rows via yfinance/q2 ✓")
                 return prices
     except Exception as e:
-        log.debug(f"  {label} yf/q2: {type(e).__name__}: {e}")
+        err = str(e)
+        if "429" in err or "RateLimit" in err or "Too Many" in err:
+            _YF_Q2_BLOCKED = True
+            log.warning(f"  yfinance/q2 rate-limited — disabling for this run")
+        else:
+            log.debug(f"  {label} yf/q2: {type(e).__name__}: {e}")
     return None
 
 
