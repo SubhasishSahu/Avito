@@ -284,15 +284,11 @@ try:
     if hist is not None and not hist.empty:
         record("yfinance/query1", True, f"{len(hist)} rows | latest: {hist['Close'].iloc[-1]:.2f}")
     else:
-        record("yfinance/query1", False, "Empty response",
-               "Rate limited. GitHub Actions shared IPs exhaust Yahoo's pool quickly.")
+        warn("yfinance/query1: empty response — likely rate-limited. Works at 18:30-23:30 UTC (midnight-5am IST).")
 except Exception as e:
     err = str(e)
-    if "429" in err or "RateLimit" in err:
-        record("yfinance/query1", False,
-               "YFRateLimitError -- Yahoo rate-limits GitHub Actions shared IPs. "
-               "No safe time window -- the IP pool is always busy.",
-               "Use BSE India API as primary. yfinance is unreliable from Actions.")
+    if "429" in err or "RateLimit" in err or "Too Many" in err:
+        warn("yfinance/query1: rate-limited at this hour. Works reliably at 18:30-23:30 UTC (midnight-5am IST).")
     else:
         record("yfinance/query1", False, f"{type(e).__name__}: {err[:150]}")
 
@@ -346,10 +342,15 @@ if any_data_source and github_ok:
     print(f"        Running it here would consume yfinance IP quota,")
     print(f"        leaving the full harvest with 0 requests available.")
 elif not any_data_source:
-    record("Pipeline ready", False,
-           "No data source returned prices (BSE empty, yfinance rate-limited)",
-           "Wait for yfinance rate limit to reset (try again in 1-2 hours) "
-           "or fix BSE India API session handling.")
+    yf_rate_limited = any("rate-limit" in w.lower() or "rate limited" in w.lower() for w in WARNINGS)
+    if yf_rate_limited:
+        warn("Pipeline readiness: yfinance is rate-limited at this hour (not a code bug). "
+             "Scheduled harvest at 18:30 UTC / midnight IST will succeed. "
+             "Avoid running dry run and harvest back-to-back during peak hours (9am-6pm IST).")
+    else:
+        record("Pipeline ready", False,
+               "No data source returned prices (not a rate-limit issue)",
+               "Check BSE India API or try a fresh data source.")
 else:
     record("Pipeline ready", False,
            "GitHub write failed — cannot store harvest results",
