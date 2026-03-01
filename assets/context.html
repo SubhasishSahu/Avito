@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AVITO · Context</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,300&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070a0d;--s1:#0b0f14;--s2:#0f1520;--s3:#141c28;--s4:#1a2535;
+  --bd:#1a2535;--bd2:#243044;
+  --green:#00e5a0;--amber:#f5a623;--blue:#38b6ff;--red:#ff4757;--purple:#a78bfa;
+  --text:#b8cce0;--t2:#6a8aa8;--t3:#3d5570;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:13px}
+body::after{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px)}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(26,37,53,.3) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(26,37,53,.3) 1px,transparent 1px);
+  background-size:44px 44px;z-index:0}
+
+#shell{position:relative;min-height:100vh;display:flex;flex-direction:column;z-index:1}
+
+/* ── TOPBAR ── */
+#top{height:44px;flex-shrink:0;background:rgba(11,15,20,.96);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:50;
+  backdrop-filter:blur(8px)}
+.t-pulse{width:7px;height:7px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.2;box-shadow:none}}
+.t-name{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--green);letter-spacing:.1em}
+.t-bc{font-family:var(--mono);font-size:9px;color:var(--t3);letter-spacing:.06em}
+.t-bc span{color:var(--t2)}
+.t-sp{flex:1}
+.t-pill{font-family:var(--mono);font-size:8px;padding:3px 9px;border-radius:2px;
+  border:1px solid var(--bd2);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.t-pill.on{border-color:rgba(0,229,160,.3);color:var(--green);background:rgba(0,229,160,.04)}
+.t-pill.a{border-color:rgba(245,166,35,.3);color:var(--amber)}
+.t-btn{padding:4px 12px;background:var(--green);border:none;color:#000;border-radius:4px;
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;cursor:pointer;
+  transition:opacity .15s}
+.t-btn:hover{opacity:.85}
+.t-btn.sec{background:transparent;border:1px solid var(--bd2);color:var(--t2)}
+.t-btn.sec:hover{border-color:var(--blue);color:var(--blue)}
+
+/* ── CONTENT ── */
+#content{flex:1;display:flex;gap:0;min-height:0}
+
+/* ── LEFT RAIL — filters ── */
+#rail{
+  width:260px;flex-shrink:0;border-right:1px solid var(--bd);
+  overflow-y:auto;padding:16px;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;
+}
+.rail-section{margin-bottom:18px}
+.r-label{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:8px}
+
+/* Context pills (selected indices) */
+.ctx-pills{display:flex;flex-wrap:wrap;gap:5px}
+.ctx-pill{font-family:var(--mono);font-size:8px;padding:2px 8px;border-radius:2px;
+  border:1px solid transparent;background:var(--s2)}
+
+/* Sector filter chips */
+.sec-chips{display:flex;flex-wrap:wrap;gap:5px}
+.sec-chip{font-family:var(--mono);font-size:8px;padding:3px 8px;border-radius:2px;
+  border:1px solid var(--bd2);background:var(--s2);cursor:pointer;
+  color:var(--t2);transition:all .15s;user-select:none}
+.sec-chip:hover{border-color:var(--blue);color:var(--blue)}
+.sec-chip.on{background:rgba(56,182,255,.08);border-color:rgba(56,182,255,.4);color:var(--blue)}
+
+/* Commodity flag cards */
+.com-card{
+  padding:10px 12px;border-radius:5px;margin-bottom:7px;
+  background:var(--s2);border:1px solid var(--bd);
+  transition:border-color .2s;
+}
+.com-card.lit{border-color:rgba(245,166,35,.3);background:rgba(245,166,35,.04)}
+.com-icon{font-size:14px;margin-bottom:4px}
+.com-name{font-family:var(--mono);font-size:9px;font-weight:600;
+  color:var(--text);margin-bottom:2px}
+.com-dir{font-family:var(--mono);font-size:8px;color:var(--amber);margin-bottom:4px}
+.com-note{font-size:9px;color:var(--t2);line-height:1.6}
+.com-stocks{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
+.com-stock{font-family:var(--mono);font-size:7px;padding:1px 5px;border-radius:2px;
+  background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.2);color:var(--green)}
+
+/* ── NEWS FEED ── */
+#feed{flex:1;overflow-y:auto;padding:16px 20px;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+
+.feed-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.feed-count{font-family:var(--mono);font-size:9px;color:var(--t3)}
+.feed-sort{display:flex;gap:5px}
+.sort-btn{font-family:var(--mono);font-size:8px;padding:3px 8px;border-radius:2px;
+  border:1px solid var(--bd2);background:var(--s2);color:var(--t2);cursor:pointer;transition:all .15s}
+.sort-btn.on,.sort-btn:hover{border-color:var(--green);color:var(--green)}
+
+/* News card */
+.news-card{
+  padding:13px 15px;border-radius:6px;margin-bottom:9px;
+  background:var(--s1);border:1px solid var(--bd);
+  transition:border-color .18s,background .18s;
+  cursor:pointer;
+}
+.news-card:hover{border-color:var(--bd2);background:var(--s2)}
+.nc-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:7px}
+.nc-source{font-family:var(--mono);font-size:8px;color:var(--t3);flex-shrink:0}
+.nc-date{font-family:var(--mono);font-size:8px;color:var(--t3);margin-left:auto;flex-shrink:0}
+.nc-title{font-size:12px;font-weight:500;color:var(--text);line-height:1.5;margin-bottom:6px}
+.nc-summary{font-size:11px;color:var(--t2);line-height:1.65}
+.nc-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.nc-tag{font-family:var(--mono);font-size:7px;padding:1px 6px;border-radius:2px;
+  background:var(--s2);border:1px solid var(--bd2);color:var(--t3)}
+.nc-tag.match{background:rgba(56,182,255,.07);border-color:rgba(56,182,255,.3);color:var(--blue)}
+
+/* Empty state */
+.empty{text-align:center;padding:60px 20px;font-family:var(--mono);font-size:10px;color:var(--t3)}
+
+/* loading */
+.spin{display:inline-block;animation:spin 1s linear infinite;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="shell">
+
+<!-- TOPBAR -->
+<div id="top">
+  <div class="t-pulse"></div>
+  <div class="t-name">AVITO</div>
+  <div style="width:1px;height:18px;background:var(--bd)"></div>
+  <div class="t-bc">/ <span>Market Context</span></div>
+  <div class="t-sp"></div>
+  <button class="t-btn sec" onclick="goBack()">← Map</button>
+  <button class="t-btn" onclick="goDashboard()">Open Dashboard →</button>
+  <div class="t-pill a" id="t-clk">--:-- IST</div>
+</div>
+
+<div id="content">
+
+  <!-- LEFT RAIL -->
+  <div id="rail">
+
+    <!-- Selected markets -->
+    <div class="rail-section">
+      <div class="r-label">// Selected Markets</div>
+      <div class="ctx-pills" id="ctx-markets"></div>
+    </div>
+
+    <!-- Sector filter -->
+    <div class="rail-section">
+      <div class="r-label">// Sector Filter</div>
+      <div class="sec-chips" id="sec-filter-chips"></div>
+    </div>
+
+    <!-- Commodity flags -->
+    <div class="rail-section">
+      <div class="r-label">// Commodity Sensitivity</div>
+      <div id="com-cards"></div>
+    </div>
+
+  </div>
+
+  <!-- NEWS FEED -->
+  <div id="feed">
+    <div class="feed-header">
+      <div class="feed-count" id="feed-count">Loading…</div>
+      <div class="feed-sort">
+        <div class="sort-btn on" onclick="sortBy('date')">Latest</div>
+        <div class="sort-btn" onclick="sortBy('sector')">By Sector</div>
+        <div class="sort-btn" onclick="sortBy('source')">By Source</div>
+      </div>
+    </div>
+    <div id="news-list"></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// DATA — injected by Streamlit
+// ══════════════════════════════════════════════════════════════
+const CONTEXT        = __CONTEXT__;   // {indices:[...], sectors:[...]}
+const NEWS           = __NEWS__;      // [{title,summary,source,url,published,tags}]
+const SECTORS_DEF    = __SECTORS__;
+const COMMODITY_FLAGS= __COMMODITY_FLAGS__;
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let activeFilters = new Set(CONTEXT.sectors || []);
+let sortMode = 'date';
+
+// ══════════════════════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════════════════════
+function tick(){
+  const s = new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  document.getElementById('t-clk').textContent = s + ' IST';
+}
+setInterval(tick,1000); tick();
+
+// ══════════════════════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════════════════════
+function goBack(){
+  window.parent.postMessage(JSON.stringify({type:'AVITO_NAV',page:'landing'}),'*');
+}
+function goDashboard(){
+  const payload = {type:'AVITO_NAV', page:'dashboard',
+    indices: CONTEXT.indices, sectors:[...activeFilters]};
+  window.parent.postMessage(JSON.stringify(payload),'*');
+}
+
+// ══════════════════════════════════════════════════════════════
+// RAIL — markets, sectors, commodities
+// ══════════════════════════════════════════════════════════════
+const GRP_COLOR = {india:'#38b6ff',asia:'#a78bfa',europe:'#00e5a0',
+  americas:'#f5a623',mideast:'#ff4757',africa:'#ff4757',commodity:'#f472b6'};
+
+function buildRail(){
+  // Markets
+  const mp = document.getElementById('ctx-markets');
+  if(CONTEXT.indices && CONTEXT.indices.length){
+    mp.innerHTML = CONTEXT.indices.map(id=>`
+      <div class="ctx-pill" style="border-color:var(--bd2);color:var(--blue)">${id}</div>`).join('');
+  } else {
+    mp.innerHTML = '<div style="font-family:var(--mono);font-size:9px;color:var(--t3)">All markets</div>';
+  }
+
+  // Sectors
+  const sc = document.getElementById('sec-filter-chips');
+  const implied = new Set(CONTEXT.sectors||[]);
+  sc.innerHTML = SECTORS_DEF
+    .filter(s => implied.size===0 || implied.has(s.id))
+    .map(s=>`
+      <div class="sec-chip ${activeFilters.has(s.id)?'on':''}"
+        onclick="toggleFilter('${s.id}')"
+        style="color:${s.color};--bc:${s.color}">
+        ${s.icon} ${s.label}
+      </div>`).join('');
+  if(!sc.innerHTML){
+    sc.innerHTML = SECTORS_DEF.map(s=>`
+      <div class="sec-chip ${activeFilters.has(s.id)?'on':''}"
+        onclick="toggleFilter('${s.id}')">${s.icon} ${s.label}</div>`).join('');
+  }
+
+  // Commodity cards
+  const cc = document.getElementById('com-cards');
+  const actSec = activeFilters.size>0 ? activeFilters : new Set(SECTORS_DEF.map(s=>s.id));
+  cc.innerHTML = COMMODITY_FLAGS.map(cf=>{
+    const lit = cf.sensitive_sectors.some(s=>actSec.has(s))
+             || cf.beneficiary_sectors.some(s=>actSec.has(s));
+    if(!lit) return '';
+    return `<div class="com-card lit">
+      <div class="com-icon">${cf.icon}</div>
+      <div class="com-name">${cf.commodity}</div>
+      <div class="com-dir">${cf.direction}</div>
+      <div class="com-note">${cf.note}</div>
+      <div class="com-stocks">
+        ${cf.correlated_stocks.map(s=>`<span class="com-stock">${s}</span>`).join('')}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('') || '<div style="font-family:var(--mono);font-size:9px;color:var(--t3)">Select sectors to see commodity links</div>';
+}
+
+function toggleFilter(id){
+  if(activeFilters.has(id)) activeFilters.delete(id);
+  else activeFilters.add(id);
+  buildRail();
+  renderNews();
+}
+
+// ══════════════════════════════════════════════════════════════
+// NEWS RENDER
+// ══════════════════════════════════════════════════════════════
+function filteredNews(){
+  if(activeFilters.size===0) return NEWS;
+  return NEWS.filter(a => a.tags.some(t=>activeFilters.has(t)));
+}
+
+function sortNews(articles){
+  if(sortMode==='date') return [...articles].sort((a,b)=>b.published.localeCompare(a.published));
+  if(sortMode==='sector') return [...articles].sort((a,b)=>(a.tags[0]||'').localeCompare(b.tags[0]||''));
+  if(sortMode==='source') return [...articles].sort((a,b)=>a.source.localeCompare(b.source));
+  return articles;
+}
+
+function renderNews(){
+  const articles = sortNews(filteredNews());
+  const list = document.getElementById('news-list');
+  const cnt  = document.getElementById('feed-count');
+  cnt.textContent = articles.length + ' article' + (articles.length!==1?'s':'') +
+    (activeFilters.size>0 ? ' · '+activeFilters.size+' sector filter'+(activeFilters.size>1?'s':'') : ' · all sectors');
+
+  if(!articles.length){
+    list.innerHTML = '<div class="empty">No articles match your filters.<br>Try removing some sector filters.</div>';
+    return;
+  }
+
+  list.innerHTML = articles.map(a=>{
+    const matchTags = a.tags.filter(t=>activeFilters.has(t));
+    const tags = a.tags.map(t=>
+      `<span class="nc-tag ${matchTags.includes(t)?'match':''}">${t}</span>`).join('');
+    return `<div class="news-card" onclick="if(this.dataset.url&&this.dataset.url!=='#')window.open(this.dataset.url,'_blank')" data-url="${a.url}">
+      <div class="nc-top">
+        <span class="nc-source">${a.source}</span>
+        <span class="nc-date">${a.published}</span>
+      </div>
+      <div class="nc-title">${a.title}</div>
+      <div class="nc-summary">${a.summary}</div>
+      <div class="nc-tags">${tags}</div>
+    </div>`;
+  }).join('');
+}
+
+function sortBy(mode){
+  sortMode = mode;
+  document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('on'));
+  event.target.classList.add('on');
+  renderNews();
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════
+buildRail();
+renderNews();
+</script>
+</body>
+</html>

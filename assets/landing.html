@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AVITO · Market Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,300&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070a0d; --s1:#0b0f14; --s2:#0f1520; --s3:#141c28; --s4:#1a2535;
+  --bd:#1a2535; --bd2:#243044;
+  --green:#00e5a0; --amber:#f5a623; --blue:#38b6ff;
+  --red:#ff4757; --purple:#a78bfa;
+  --text:#b8cce0; --t2:#6a8aa8; --t3:#3d5570;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:13px;overflow:hidden}
+
+/* CRT scanlines */
+body::after{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,
+  rgba(0,0,0,.05) 3px,rgba(0,0,0,.05) 4px)}
+
+/* grid bg */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(26,37,53,.35) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(26,37,53,.35) 1px,transparent 1px);
+  background-size:44px 44px}
+
+/* ── SHELL ── */
+#shell{position:relative;height:100vh;display:flex;flex-direction:column;z-index:1}
+
+/* ── TOPBAR ── */
+#top{
+  height:44px;flex-shrink:0;
+  background:rgba(11,15,20,.96);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 20px;gap:16px;
+  backdrop-filter:blur(8px);
+}
+.t-logo{display:flex;align-items:center;gap:9px}
+.t-pulse{width:7px;height:7px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.2;box-shadow:none}}
+.t-name{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--green);letter-spacing:.1em}
+.t-sub{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase}
+.t-sep{width:1px;height:20px;background:var(--bd);margin:0 4px}
+.t-sp{flex:1}
+.t-pill{font-family:var(--mono);font-size:8px;padding:3px 9px;border-radius:2px;
+  border:1px solid var(--bd2);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.t-pill.on{border-color:rgba(0,229,160,.3);color:var(--green);background:rgba(0,229,160,.04)}
+.t-pill.a{border-color:rgba(245,166,35,.3);color:var(--amber)}
+#t-clk{min-width:80px;text-align:right}
+
+/* ── MAIN AREA ── */
+#main{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column}
+
+/* ── MAP CONTAINER ── */
+#map-wrap{
+  flex:1;position:relative;overflow:hidden;min-height:0;
+}
+#map-svg{width:100%;height:100%;display:block}
+
+/* continent paths */
+.continent{fill:rgba(26,37,53,.5);stroke:rgba(56,182,255,.12);stroke-width:.8}
+/* graticule */
+.graticule{stroke:rgba(26,37,53,.6);stroke-width:.5;fill:none}
+/* equator / meridian */
+.equator{stroke:rgba(56,182,255,.15);stroke-width:.8;fill:none;stroke-dasharray:4 8}
+
+/* ── INDEX DOTS ── */
+.idx-grp{cursor:pointer}
+.idx-ring{fill:none;stroke-width:1;opacity:0;
+  transition:opacity .3s,r .3s;transform-origin:center}
+.idx-grp:hover .idx-ring,.idx-grp.selected .idx-ring{opacity:1;animation:ring-pulse 2s ease-in-out infinite}
+@keyframes ring-pulse{0%,100%{opacity:.6}50%{opacity:1}}
+.idx-dot{transition:r .2s,filter .2s}
+.idx-grp:hover .idx-dot,.idx-grp.selected .idx-dot{filter:brightness(1.4)}
+.idx-label{
+  font-family:var(--mono);font-size:6.5px;fill:rgba(184,204,224,.6);
+  pointer-events:none;letter-spacing:.04em;
+  transition:fill .2s;
+}
+.idx-grp:hover .idx-label,.idx-grp.selected .idx-label{fill:rgba(184,204,224,1)}
+.idx-grp.selected .idx-dot{filter:brightness(1.6) drop-shadow(0 0 4px currentColor)}
+
+/* ── COMMODITY FLOW LINES ── */
+.flow-line{stroke-dasharray:6 6;stroke-width:1;fill:none;opacity:.28;
+  animation:dash-move 12s linear infinite}
+@keyframes dash-move{to{stroke-dashoffset:-60}}
+
+/* ── TOOLTIP ── */
+#tooltip{
+  position:absolute;pointer-events:none;z-index:100;
+  background:rgba(11,15,20,.96);border:1px solid var(--bd2);
+  border-radius:6px;padding:9px 12px;
+  font-family:var(--mono);font-size:10px;color:var(--text);
+  backdrop-filter:blur(10px);
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+  transform:translate(-50%,-110%);
+  transition:opacity .15s;opacity:0;white-space:nowrap;
+  max-width:220px;white-space:normal;
+}
+#tooltip.show{opacity:1}
+.tt-name{font-size:11px;font-weight:600;color:var(--green);margin-bottom:3px}
+.tt-meta{font-size:9px;color:var(--t2)}
+.tt-hint{font-size:8px;color:var(--t3);margin-top:4px;font-style:italic}
+
+/* ── BOTTOM PANEL — slides up on index click ── */
+#panel{
+  position:absolute;bottom:0;left:0;right:0;
+  background:rgba(7,10,13,.97);
+  border-top:1px solid var(--bd);
+  transform:translateY(100%);
+  transition:transform .4s cubic-bezier(.16,1,.3,1);
+  z-index:50;
+  backdrop-filter:blur(16px);
+  max-height:62vh;
+  display:flex;flex-direction:column;
+}
+#panel.open{transform:translateY(0)}
+
+/* Panel header */
+#panel-hd{
+  padding:12px 20px 10px;
+  border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.ph-tag{font-family:var(--mono);font-size:8px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--t3)}
+.ph-title{font-size:13px;font-weight:500;color:var(--text)}
+.ph-sel{font-family:var(--mono);font-size:9px;color:var(--green)}
+#panel-close{
+  margin-left:auto;width:28px;height:28px;border-radius:4px;
+  background:var(--s2);border:1px solid var(--bd2);
+  color:var(--t2);cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+#panel-close:hover{border-color:var(--red);color:var(--red)}
+
+/* Panel body */
+#panel-body{flex:1;overflow-y:auto;padding:14px 20px;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+
+/* Step 1: Index chips */
+#step-indices{margin-bottom:16px}
+.step-label{font-family:var(--mono);font-size:8px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--t3);margin-bottom:8px}
+.idx-chips{display:flex;flex-wrap:wrap;gap:6px}
+.idx-chip{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 10px;border-radius:3px;
+  font-family:var(--mono);font-size:9px;
+  border:1px solid var(--bd2);background:var(--s2);
+  color:var(--t2);cursor:pointer;
+  transition:all .18s;user-select:none;
+}
+.idx-chip:hover{border-color:var(--blue);color:var(--blue)}
+.idx-chip.on{background:rgba(56,182,255,.08);border-color:rgba(56,182,255,.4);color:var(--blue)}
+.idx-chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+/* Step 2: Sector tiles */
+#step-sectors{margin-bottom:16px}
+.sector-grid{display:flex;flex-wrap:wrap;gap:7px}
+.sec-tile{
+  display:flex;align-items:center;gap:7px;
+  padding:6px 12px;border-radius:4px;
+  font-size:11px;border:1px solid transparent;
+  cursor:pointer;transition:all .18s;user-select:none;
+  background:var(--s2);border-color:var(--bd);
+}
+.sec-tile:hover{transform:translateY(-1px);filter:brightness(1.15)}
+.sec-tile.on{border-color:currentColor;background:color-mix(in srgb,currentColor 10%,transparent)}
+.sec-tile-icon{font-size:13px}
+.sec-tile-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.04em}
+.sec-tile-stocks{font-size:8px;color:var(--t3);margin-top:1px}
+
+/* Commodity flags strip */
+#step-commodities{margin-bottom:14px}
+.com-strip{display:flex;gap:8px;flex-wrap:wrap}
+.com-flag{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 10px;border-radius:3px;
+  background:var(--s2);border:1px solid var(--bd);
+  font-family:var(--mono);font-size:9px;color:var(--t2);
+  position:relative;cursor:default;
+}
+.com-flag.lit{border-color:var(--amber);color:var(--amber);background:rgba(245,166,35,.06)}
+.com-flag-icon{font-size:11px}
+
+/* CTA */
+#panel-cta{
+  padding:12px 20px;border-top:1px solid var(--bd);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+#btn-enter{
+  padding:9px 24px;background:var(--green);border:none;color:#000;
+  border-radius:5px;font-family:var(--mono);font-size:10px;
+  font-weight:700;letter-spacing:.1em;cursor:pointer;
+  transition:opacity .2s,transform .15s;
+}
+#btn-enter:hover{opacity:.88;transform:translateY(-1px)}
+#btn-enter:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.cta-hint{font-family:var(--mono);font-size:9px;color:var(--t3)}
+#sel-summary{font-family:var(--mono);font-size:9px;color:var(--green);margin-left:auto}
+
+/* ── STEP INDICATOR ── */
+.step-row{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.step-n{width:18px;height:18px;border-radius:50%;border:1px solid var(--bd2);
+  font-family:var(--mono);font-size:8px;color:var(--t3);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-n.done{background:rgba(0,229,160,.1);border-color:var(--green);color:var(--green)}
+.step-n.active{background:rgba(56,182,255,.1);border-color:var(--blue);color:var(--blue)}
+.step-line{height:1px;width:24px;background:var(--bd)}
+
+/* ── LEGEND ── */
+#legend{
+  position:absolute;top:52px;right:12px;z-index:30;
+  background:rgba(7,10,13,.88);border:1px solid var(--bd);
+  border-radius:6px;padding:10px 12px;backdrop-filter:blur(8px);
+}
+.leg-title{font-family:var(--mono);font-size:7px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--t3);margin-bottom:7px}
+.leg-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;
+  font-family:var(--mono);font-size:8px;color:var(--t2)}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.leg-line{width:18px;height:1px;border-top:1px dashed;flex-shrink:0;opacity:.6}
+
+/* ── SELECTED INDICES MINI-MAP LABELS ── */
+#sel-badges{
+  position:absolute;bottom:10px;left:12px;z-index:30;
+  display:flex;gap:5px;flex-wrap:wrap;max-width:320px;
+  pointer-events:none;
+}
+.sel-badge{
+  font-family:var(--mono);font-size:8px;padding:2px 7px;border-radius:2px;
+  background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.25);color:var(--green);
+  animation:fadeIn .2s ease;
+}
+@keyframes fadeIn{from{opacity:0;transform:scale(.8)}}
+
+/* scrollbar */
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+</style>
+</head>
+<body>
+<div id="shell">
+
+<!-- ═══ TOPBAR ═══ -->
+<div id="top">
+  <div class="t-logo">
+    <div class="t-pulse"></div>
+    <div>
+      <div class="t-name">AVITO</div>
+    </div>
+  </div>
+  <div class="t-sep"></div>
+  <div class="t-sub">Market Intelligence Terminal</div>
+  <div class="t-sp"></div>
+  <div class="t-pill on" id="t-status">● 77 stocks tracked</div>
+  <div class="t-pill" id="t-region">Global Markets</div>
+  <div class="t-pill a" id="t-clk">--:-- IST</div>
+</div>
+
+<!-- ═══ MAIN ═══ -->
+<div id="main">
+
+  <!-- Legend -->
+  <div id="legend">
+    <div class="leg-title">// Map Legend</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#38b6ff"></div>India</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#a78bfa"></div>Asia-Pacific</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#00e5a0"></div>Europe</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#f5a623"></div>Americas</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#ff4757"></div>Mid East / Africa</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodity Hub</div>
+    <div class="leg-row"><div class="leg-line" style="border-color:#f5a623"></div>Commodity flow</div>
+  </div>
+
+  <!-- Selected badges overlay -->
+  <div id="sel-badges"></div>
+
+  <!-- Tooltip -->
+  <div id="tooltip">
+    <div class="tt-name" id="tt-name"></div>
+    <div class="tt-meta" id="tt-meta"></div>
+    <div class="tt-hint" id="tt-hint"></div>
+  </div>
+
+  <!-- ═══ MAP SVG ═══ -->
+  <div id="map-wrap">
+    <svg id="map-svg" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-sm">
+          <feGaussianBlur stdDeviation="1.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Ocean background -->
+      <rect width="1000" height="520" fill="#040608"/>
+
+      <!-- Graticule lines (30° spacing) -->
+      <g class="graticule">
+        <!-- Horizontal (latitude) -->
+        <line x1="0" y1="86"  x2="1000" y2="86"/>
+        <line x1="0" y1="173" x2="1000" y2="173"/>
+        <line x1="0" y1="260" x2="1000" y2="260"/>
+        <line x1="0" y1="347" x2="1000" y2="347"/>
+        <line x1="0" y1="434" x2="1000" y2="434"/>
+        <!-- Vertical (longitude) -->
+        <line x1="83"  y1="0" x2="83"  y2="520"/>
+        <line x1="167" y1="0" x2="167" y2="520"/>
+        <line x1="250" y1="0" x2="250" y2="520"/>
+        <line x1="333" y1="0" x2="333" y2="520"/>
+        <line x1="417" y1="0" x2="417" y2="520"/>
+        <line x1="500" y1="0" x2="500" y2="520"/>
+        <line x1="583" y1="0" x2="583" y2="520"/>
+        <line x1="667" y1="0" x2="667" y2="520"/>
+        <line x1="750" y1="0" x2="750" y2="520"/>
+        <line x1="833" y1="0" x2="833" y2="520"/>
+        <line x1="917" y1="0" x2="917" y2="520"/>
+      </g>
+      <!-- Equator -->
+      <line class="equator" x1="0" y1="260" x2="1000" y2="260"/>
+
+      <!-- ═══ CONTINENT OUTLINES (simplified polygons) ═══ -->
+      <!-- North America -->
+      <polygon class="continent" points="
+        95,80 170,70 230,75 265,85 290,95 305,110 310,135 290,155 280,170 265,185
+        255,200 245,215 230,225 215,230 200,245 195,260 185,275 175,285 165,295
+        155,280 145,265 135,250 125,240 115,225 105,205 95,185 88,165 83,145
+        80,125 82,105 88,90"/>
+      <!-- Greenland -->
+      <polygon class="continent" points="190,45 240,38 280,42 300,55 290,70 270,78 240,75 210,68 192,58"/>
+      <!-- South America -->
+      <polygon class="continent" points="
+        220,280 240,270 265,268 280,275 295,285 305,300 310,320 308,340
+        300,360 285,378 270,395 255,410 240,420 228,415 218,400 210,385
+        205,365 205,345 208,325 212,308 215,292"/>
+      <!-- Europe -->
+      <polygon class="continent" points="
+        390,80 420,72 455,68 485,72 510,78 525,90 520,105 510,115 495,120
+        480,125 465,130 450,128 435,132 420,128 405,120 395,110 388,98"/>
+      <!-- Scandinavia bump -->
+      <polygon class="continent" points="450,68 465,55 480,52 492,58 488,68 475,72 460,70"/>
+      <!-- UK blob -->
+      <polygon class="continent" points="415,95 425,88 432,92 428,102 418,104"/>
+      <!-- Africa -->
+      <polygon class="continent" points="
+        440,165 465,158 490,158 515,162 535,170 548,185 555,205 555,230
+        550,255 540,275 525,295 510,315 495,332 480,345 465,355 450,358
+        435,350 420,338 410,320 405,300 405,278 408,258 415,238 425,218
+        432,198 435,178 438,168"/>
+      <!-- Madagascar -->
+      <polygon class="continent" points="545,295 555,285 562,295 560,315 550,322 542,312"/>
+      <!-- Middle East peninsula -->
+      <polygon class="continent" points="
+        530,185 548,178 565,175 580,178 590,188 592,200 585,212 572,218
+        558,215 545,205 535,195"/>
+      <!-- Indian subcontinent -->
+      <polygon class="continent" points="
+        615,195 638,185 662,183 680,188 692,198 698,215 695,235 685,252
+        672,265 658,272 645,268 630,255 618,240 610,222 611,207"/>
+      <!-- Southeast Asia / peninsula -->
+      <polygon class="continent" points="
+        730,225 750,215 768,218 775,230 772,245 760,252 745,248 732,238"/>
+      <!-- Sri Lanka -->
+      <polygon class="continent" points="680,278 686,272 692,278 690,288 682,288"/>
+      <!-- Eurasia main -->
+      <polygon class="continent" points="
+        390,80 425,72 470,68 510,65 555,62 600,60 645,60 690,62 730,65
+        770,68 810,72 845,78 875,85 900,95 920,108 930,122 925,138
+        915,150 900,160 878,168 855,172 828,175 800,178 775,182
+        748,188 725,195 700,198 678,195 658,190 635,188 615,192
+        595,195 572,195 550,192 528,188 508,185 488,178 468,172
+        448,168 428,162 412,155 400,145 390,132 385,118 386,102"/>
+      <!-- Japan -->
+      <polygon class="continent" points="820,165 832,158 842,162 840,175 828,178 818,172"/>
+      <polygon class="continent" points="835,148 845,142 852,148 848,158 838,158"/>
+      <!-- Australia -->
+      <polygon class="continent" points="
+        790,330 820,318 850,315 878,320 900,332 912,348 910,365 898,380
+        880,390 858,395 832,392 808,382 790,368 780,352 782,338"/>
+      <!-- New Zealand -->
+      <polygon class="continent" points="920,375 928,368 934,375 930,388 922,390"/>
+    </svg>
+  </div><!-- /map-wrap -->
+
+  <!-- ═══ SLIDE-UP PANEL ═══ -->
+  <div id="panel">
+    <div id="panel-hd">
+      <div>
+        <div class="ph-tag">// Market Context Builder</div>
+        <div class="ph-title">Select indices → filter sectors → open dashboard</div>
+      </div>
+      <div id="ph-sel-count" class="ph-sel"></div>
+      <button id="panel-close" onclick="closePanel()">✕</button>
+    </div>
+
+    <div id="panel-body">
+
+      <!-- Step indicator -->
+      <div class="step-row">
+        <div class="step-n active" id="sn1">1</div>
+        <span style="font-family:var(--mono);font-size:8px;color:var(--t2)">Markets</span>
+        <div class="step-line"></div>
+        <div class="step-n" id="sn2">2</div>
+        <span style="font-family:var(--mono);font-size:8px;color:var(--t2)">Sectors</span>
+        <div class="step-line"></div>
+        <div class="step-n" id="sn3">3</div>
+        <span style="font-family:var(--mono);font-size:8px;color:var(--t2)">Commodities</span>
+      </div>
+
+      <!-- Step 1: Selected index chips -->
+      <div id="step-indices">
+        <div class="step-label">// Selected markets — click to deselect</div>
+        <div class="idx-chips" id="idx-chips"></div>
+      </div>
+
+      <!-- Step 2: Sector tiles -->
+      <div id="step-sectors">
+        <div class="step-label">// Filter sectors — click to toggle (all = no filter)</div>
+        <div class="sector-grid" id="sector-grid"></div>
+      </div>
+
+      <!-- Step 3: Commodity flags -->
+      <div id="step-commodities">
+        <div class="step-label">// Commodity sensitivity — lit = active for your selected sectors</div>
+        <div class="com-strip" id="com-strip"></div>
+      </div>
+
+    </div><!-- /panel-body -->
+
+    <div id="panel-cta">
+      <button id="btn-enter" disabled onclick="enterDashboard()">OPEN DASHBOARD →</button>
+      <span class="cta-hint">Choose at least one market to continue</span>
+      <span id="sel-summary"></span>
+    </div>
+  </div><!-- /panel -->
+
+</div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// DATA — injected by Streamlit renderer
+// ══════════════════════════════════════════════════════════════
+const INDICES        = __INDICES__;
+const SECTORS        = __SECTORS__;
+const COMMODITY_FLAGS= __COMMODITY_FLAGS__;
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+const state = {
+  selectedIdx:     new Set(),   // index IDs
+  selectedSectors: new Set(),   // sector IDs
+  panelOpen:       false,
+};
+
+// ══════════════════════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════════════════════
+function tick(){
+  const s = new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  document.getElementById('t-clk').textContent = s + ' IST';
+}
+setInterval(tick, 1000); tick();
+
+// ══════════════════════════════════════════════════════════════
+// GROUP COLOURS
+// ══════════════════════════════════════════════════════════════
+const GRP_COLOR = {
+  india:'#38b6ff', asia:'#a78bfa', europe:'#00e5a0',
+  americas:'#f5a623', mideast:'#ff4757', africa:'#ff4757',
+  commodity:'#f472b6',
+};
+const GRP_RING_R = {
+  india:10, asia:8, europe:8, americas:8,
+  mideast:7, africa:7, commodity:6,
+};
+
+// ══════════════════════════════════════════════════════════════
+// BUILD MAP — draw dots on SVG
+// ══════════════════════════════════════════════════════════════
+function buildMap(){
+  const svg = document.getElementById('map-svg');
+
+  // Commodity flow lines first (below dots)
+  const flows = [
+    {x1:442,y1:150,x2:650,y2:255, color:'#f5a623', label:'Brent→India'},  // London oil to Mumbai
+    {x1:212,y1:192,x2:650,y2:255, color:'#f5a623', label:'WTI→India'},    // NY oil to Mumbai
+    {x1:573,y1:256,x2:650,y2:255, color:'#f5a623', label:'Dubai→India'},   // Dubai oil to Mumbai
+    {x1:440,y1:152,x2:650,y2:255, color:'#94a3b8', label:'LME Cu→India'},  // London copper to Mumbai
+    {x1:787,y1:215,x2:650,y2:255, color:'#94a3b8', label:'Shanghai→India'},// China metals to India
+    {x1:775,y1:287,x2:650,y2:255, color:'#22d3ee', label:'SGX→India'},     // Singapore to India
+  ];
+  const flowG = document.createElementNS('http://www.w3.org/2000/svg','g');
+  flowG.setAttribute('id','flow-lines');
+  flows.forEach(f=>{
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',f.x1); l.setAttribute('y1',f.y1);
+    l.setAttribute('x2',f.x2); l.setAttribute('y2',f.y2);
+    l.setAttribute('class','flow-line');
+    l.setAttribute('stroke',f.color);
+    // stagger animation
+    l.style.animationDelay = (Math.random()*6)+'s';
+    flowG.appendChild(l);
+  });
+  svg.appendChild(flowG);
+
+  // Deduplicate dots that share very close coords
+  // Build groups for clustered indices
+  const placed = {};
+  INDICES.forEach(idx => {
+    const key = `${Math.round(idx.x/5)*5}_${Math.round(idx.y/5)*5}`;
+    if(!placed[key]) placed[key] = [];
+    placed[key].push(idx);
+  });
+
+  // Draw each index
+  INDICES.forEach((idx, i) => {
+    const col   = GRP_COLOR[idx.group] || '#b8cce0';
+    const ringR = GRP_RING_R[idx.group] || 8;
+    const dotR  = idx.group === 'india' ? 5 : idx.group === 'commodity' ? 3.5 : 4;
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','idx-grp');
+    g.setAttribute('id','dot-'+idx.id);
+    g.style.color = col;
+
+    // Pulse ring
+    const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    ring.setAttribute('class','idx-ring');
+    ring.setAttribute('cx', idx.x); ring.setAttribute('cy', idx.y);
+    ring.setAttribute('r', ringR); ring.setAttribute('stroke', col);
+    ring.style.animationDelay = (i*0.3)+'s';
+
+    // Dot
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('class','idx-dot');
+    dot.setAttribute('cx', idx.x); dot.setAttribute('cy', idx.y);
+    dot.setAttribute('r', dotR);
+    dot.setAttribute('fill', col);
+    dot.setAttribute('filter','url(#glow-sm)');
+
+    // Label — offset to avoid overlap
+    const lbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+    lbl.setAttribute('class','idx-label');
+    const offY = idx.group === 'commodity' ? -8 : -9;
+    const offX = idx.x > 750 ? -5 : idx.x < 250 ? 5 : 0;
+    lbl.setAttribute('x', idx.x + offX);
+    lbl.setAttribute('y', idx.y + offY);
+    lbl.setAttribute('text-anchor', idx.x > 750 ? 'end' : idx.x < 250 ? 'start' : 'middle');
+    lbl.textContent = idx.label;
+
+    g.appendChild(ring);
+    g.appendChild(dot);
+    g.appendChild(lbl);
+
+    // Events
+    g.addEventListener('mouseenter', e => showTooltip(e, idx));
+    g.addEventListener('mouseleave', hideTooltip);
+    g.addEventListener('click', () => toggleIndex(idx));
+
+    svg.appendChild(g);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOOLTIP
+// ══════════════════════════════════════════════════════════════
+const tt = document.getElementById('tooltip');
+function showTooltip(e, idx){
+  const rect = document.getElementById('map-wrap').getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  document.getElementById('tt-name').textContent = idx.label;
+  document.getElementById('tt-meta').textContent =
+    idx.exchange + ' · ' + idx.city + ' · ' + idx.region;
+  const secs = idx.sectors.slice(0,4).join(', ') + (idx.sectors.length>4?'…':'');
+  document.getElementById('tt-hint').textContent =
+    'Sectors: '+secs+(state.selectedIdx.has(idx.id)?'' : ' — click to select');
+  tt.style.left = x+'px'; tt.style.top = y+'px';
+  tt.classList.add('show');
+}
+function hideTooltip(){ tt.classList.remove('show') }
+
+// ══════════════════════════════════════════════════════════════
+// INDEX TOGGLE
+// ══════════════════════════════════════════════════════════════
+function toggleIndex(idx){
+  if(state.selectedIdx.has(idx.id)){
+    state.selectedIdx.delete(idx.id);
+    document.getElementById('dot-'+idx.id)?.classList.remove('selected');
+  } else {
+    state.selectedIdx.add(idx.id);
+    document.getElementById('dot-'+idx.id)?.classList.add('selected');
+  }
+  openPanel();
+  refreshPanel();
+}
+
+// ══════════════════════════════════════════════════════════════
+// PANEL
+// ══════════════════════════════════════════════════════════════
+function openPanel(){
+  document.getElementById('panel').classList.add('open');
+  state.panelOpen = true;
+}
+function closePanel(){
+  document.getElementById('panel').classList.remove('open');
+  state.panelOpen = false;
+}
+
+function refreshPanel(){
+  renderIndexChips();
+  inferAndRenderSectors();
+  renderCommodityFlags();
+  updateCTA();
+  updateSelBadges();
+}
+
+function renderIndexChips(){
+  const container = document.getElementById('idx-chips');
+  const idxMap = Object.fromEntries(INDICES.map(i=>[i.id,i]));
+
+  if(state.selectedIdx.size === 0){
+    container.innerHTML = '<span style="font-family:var(--mono);font-size:9px;color:var(--t3)">No markets selected — click dots on the map</span>';
+    return;
+  }
+  container.innerHTML = [...state.selectedIdx].map(id=>{
+    const idx = idxMap[id];
+    if(!idx) return '';
+    const col = GRP_COLOR[idx.group]||'#b8cce0';
+    return `<div class="idx-chip on" onclick="deselIdx('${id}')">
+      <div class="idx-chip-dot" style="background:${col}"></div>
+      <span>${idx.label}</span>
+      <span style="opacity:.4;margin-left:2px;font-size:11px">×</span>
+    </div>`;
+  }).join('');
+  document.getElementById('ph-sel-count').textContent =
+    state.selectedIdx.size + ' market' + (state.selectedIdx.size>1?'s':'') + ' selected';
+
+  // step 1 done
+  document.getElementById('sn1').classList.add('done');
+  document.getElementById('sn2').classList.add('active');
+}
+
+function deselIdx(id){
+  state.selectedIdx.delete(id);
+  document.getElementById('dot-'+id)?.classList.remove('selected');
+  refreshPanel();
+}
+
+function inferAndRenderSectors(){
+  // Collect all sectors from selected indices
+  const idxMap = Object.fromEntries(INDICES.map(i=>[i.id,i]));
+  const implied: Set<string> = new Set();
+  state.selectedIdx.forEach(id=>{
+    (idxMap[id]?.sectors||[]).forEach(s=>implied.add(s));
+  });
+
+  const grid = document.getElementById('sector-grid');
+  grid.innerHTML = SECTORS.map(sec=>{
+    const isImplied = implied.has(sec.id) || state.selectedIdx.size===0;
+    const isOn = state.selectedSectors.has(sec.id);
+    const dim = !isImplied ? 'opacity:.3;pointer-events:none' : '';
+    return `<div class="sec-tile ${isOn?'on':''}"
+      style="color:${sec.color};${dim}"
+      onclick="toggleSector('${sec.id}')">
+      <span class="sec-tile-icon">${sec.icon}</span>
+      <div>
+        <div class="sec-tile-lbl">${sec.label}</div>
+        <div class="sec-tile-stocks">${sec.stocks.slice(0,2).join(' · ')}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  if(state.selectedSectors.size>0){
+    document.getElementById('sn2').classList.add('done');
+    document.getElementById('sn3').classList.add('active');
+  }
+}
+
+function toggleSector(id){
+  if(state.selectedSectors.has(id)) state.selectedSectors.delete(id);
+  else state.selectedSectors.add(id);
+  inferAndRenderSectors();
+  renderCommodityFlags();
+  updateCTA();
+}
+
+function renderCommodityFlags(){
+  const strip = document.getElementById('com-strip');
+  const activeSectors = state.selectedSectors.size>0
+    ? state.selectedSectors
+    : new Set(SECTORS.map(s=>s.id));
+
+  strip.innerHTML = COMMODITY_FLAGS.map(cf=>{
+    const lit = cf.sensitive_sectors.some(s=>activeSectors.has(s))
+             || cf.beneficiary_sectors.some(s=>activeSectors.has(s));
+    return `<div class="com-flag ${lit?'lit':''}" title="${cf.note}">
+      <span class="com-flag-icon">${cf.icon}</span>
+      <span>${cf.commodity}</span>
+      ${lit?`<span style="font-size:8px;opacity:.7;margin-left:3px">${cf.direction.split('=')[0].trim()}</span>`:''}
+    </div>`;
+  }).join('');
+}
+
+function updateSelBadges(){
+  const idxMap = Object.fromEntries(INDICES.map(i=>[i.id,i]));
+  const badges = document.getElementById('sel-badges');
+  badges.innerHTML = [...state.selectedIdx].map(id=>{
+    const idx = idxMap[id];
+    return idx ? `<div class="sel-badge">${idx.label}</div>` : '';
+  }).join('');
+}
+
+function updateCTA(){
+  const btn = document.getElementById('btn-enter');
+  const hint = document.querySelector('.cta-hint');
+  const summary = document.getElementById('sel-summary');
+
+  const hasIdx = state.selectedIdx.size > 0;
+  btn.disabled = !hasIdx;
+
+  if(!hasIdx){
+    hint.textContent = 'Choose at least one market to continue';
+    summary.textContent = '';
+  } else {
+    const sCount = state.selectedSectors.size;
+    hint.textContent = sCount>0
+      ? `${sCount} sector filter${sCount>1?'s':''} applied`
+      : 'All sectors included (no filter)';
+    const idxMap = Object.fromEntries(INDICES.map(i=>[i.id,i]));
+    const labels = [...state.selectedIdx].map(id=>idxMap[id]?.label||id);
+    summary.textContent = labels.join(' + ');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ENTER DASHBOARD
+// sends state to Streamlit via postMessage / URL hash
+// ══════════════════════════════════════════════════════════════
+function enterDashboard(){
+  const payload = {
+    type: 'AVITO_CONTEXT',
+    indices:  [...state.selectedIdx],
+    sectors:  [...state.selectedSectors],
+    timestamp: Date.now(),
+  };
+  // communicate to Streamlit parent
+  window.parent.postMessage(JSON.stringify(payload), '*');
+  // Also store in sessionStorage for same-page reads
+  try { sessionStorage.setItem('avito_context', JSON.stringify(payload)); } catch(e){}
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════
+buildMap();
+renderCommodityFlags();
+</script>
+</body>
+</html>
