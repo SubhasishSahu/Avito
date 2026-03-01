@@ -282,41 +282,41 @@ def get_signals(snapshot: list[dict]) -> list[dict]:
 # ══════════════════════════════════════════════════════════════
 # ── LIVE MODE  (uncomment when ready) ─────────────────────────
 #
-# import json, base64
-# import streamlit as st
-# from cryptography.fernet import Fernet
-# import yfinance as yf
-#
-# def _fernet():
-#     return Fernet(st.secrets["FERNET_KEY"].encode())
-#
-# def _decrypt_json(b64_enc: str) -> Any:
-#     raw = base64.b64decode(b64_enc.encode())
-#     return json.loads(_fernet().decrypt(raw))
-#
-# def _fetch_enc_file(path: str) -> Any:
-#     import requests
-#     token  = st.secrets["GITHUB_TOKEN"]
-#     repo   = st.secrets.get("GITHUB_REPO", "SubhasishSahu/Avito")
-#     url    = f"https://api.github.com/repos/{repo}/contents/db/{path}"
-#     r = requests.get(url, headers={"Authorization": f"token {token}"})
-#     r.raise_for_status()
-#     return _decrypt_json(r.json()["content"].replace("\n",""))
-#
-# def get_harvest_meta():
-#     return _fetch_enc_file("metadata.enc")
-#
-# def get_snapshot():
-#     return _fetch_enc_file("snapshot.enc")
-#
-# def get_holdings():
-#     return _fetch_enc_file("holdings_trigger.enc")
-#
-# def get_nifty_series(sessions=742):
-#     df = yf.Ticker("^NSEI").history(period="3y", interval="1d")
-#     return [{"date": str(r.Index.date()), "open": r.Open, "high": r.High,
-#              "low": r.Low, "close": r.Close, "volume": r.Volume}
-#             for r in df.itertuples()]
+import json, base64
+import streamlit as st
+from cryptography.fernet import Fernet
+import yfinance as yf
+
+def _fernet():
+    return Fernet(st.secrets["FERNET_KEY"].encode())
+
+def _decrypt_json(b64_enc: str) -> Any:
+    raw = base64.b64decode(b64_enc.encode())
+    return json.loads(_fernet().decrypt(raw))
+
+def _fetch_enc_file(path: str) -> Any:
+    import requests
+    token  = st.secrets["GITHUB_TOKEN"]
+    repo   = st.secrets.get("GITHUB_REPO", "SubhasishSahu/Avito")
+    url    = f"https://api.github.com/repos/{repo}/contents/db/{path}"
+    r = requests.get(url, headers={"Authorization": f"token {token}"})
+    r.raise_for_status()
+    return _decrypt_json(r.json()["content"].replace("\n",""))
+
+def get_harvest_meta():
+    return _fetch_enc_file("metadata.enc")
+
+def get_snapshot():
+    return _fetch_enc_file("snapshot.enc")
+
+def get_holdings():
+    return _fetch_enc_file("holdings_trigger.enc")
+
+def get_nifty_series(sessions=742):
+    df = yf.Ticker("^NSEI").history(period="3y", interval="1d")
+    return [{"date": str(r.Index.date()), "open": r.Open, "high": r.High,
+             "low": r.Low, "close": r.Close, "volume": r.Volume}
+            for r in df.itertuples()]
 #
 # ══════════════════════════════════════════════════════════════
 
