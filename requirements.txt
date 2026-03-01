@@ -26,3 +26,12 @@ xlrd==2.0.1
 # Utilities
 python-dateutil==2.9.0
 pytz==2024.2
+
+### New App Design
+##streamlit>=1.32.0
+##pandas>=2.1.0
+##openpyxl>=3.1.2
+##requests>=2.31.0
+# cryptography>=42.0.0
+# yfinance>=0.2.36
+
