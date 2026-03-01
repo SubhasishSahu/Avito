@@ -44,6 +44,26 @@ Fix history
             -> Colab test proved Stooq has no Indian stock coverage
             -> removed Stooq, BSE, FMP, _rotating_get, _BROWSER_PROFILES
             -> yfinance-only with query1 + query2 circuit breakers
+  BUG_15    Index fetch (^NSEI) opened stock circuit breakers (run 58890721487)
+            -> _fetch_index_yf_q1/q2 used _YF_Q1/Q2_BLOCKED (shared with stocks)
+            -> index 429 at 12:07:49 UTC set _YF_Q1_BLOCKED = True
+            -> all 89 stocks dead-skipped before making a single request
+            -> fix: index uses private _IDX_Q1/Q2_BLOCKED flags only
+            -> stock CBs now only open on STOCK fetch 429s
+            -> also added REQUEST_PAUSE (0.5s) before each Yahoo HTTP call
+  BUG_16    Circuit breaker tripped mid-harvest despite 0.5s REQUEST_PAUSE.
+            Root cause: yfinance.Ticker.history() makes 2-3 HTTP requests
+            internally per call (crumb fetch + chart API + optional cookie).
+            REQUEST_PAUSE fires only once per ticker, so a 89-stock harvest
+            sends ~220 HTTP requests in ~90s — roughly 2-3 req/s burst.
+            Yahoo's Azure-IP rate limit triggers at sustained rates > ~1 req/s.
+            Fix: ThrottledSession subclass overrides requests.Session.request()
+            and inserts a INTER_REQUEST_PAUSE (1.2s) between every individual
+            HTTP call. Passed to yfinance via session= parameter so it controls
+            the crumb fetch, the chart fetch, and any cookie refresh — all of
+            them. The 1.2s gap means the full harvest sends ~220 requests over
+            ~265s (~4.4 min), well within Yahoo's per-IP hourly quota at
+            midnight IST when shared Azure pool usage is low.
 """
 import os
 import sys
@@ -279,8 +299,64 @@ def get_ticker_meta(nse_symbol: str) -> dict:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-THROTTLE_SECS = 1.0   # polite delay between stocks
-PRICE_PERIOD  = "3y"
+THROTTLE_SECS      = 1.0   # delay between stocks (after analytics, before next)
+INTER_REQUEST_PAUSE = 1.2  # pause inserted between EVERY individual HTTP call
+                            # made by yfinance (crumb + chart + cookie = 2-3 per
+                            # ticker). At 1.2s/request × ~2.5 req/ticker × 89
+                            # tickers ≈ 267s total — well under Yahoo's hourly
+                            # quota for a clean midnight-IST Azure IP.
+PRICE_PERIOD       = "3y"
+
+
+# ---------------------------------------------------------------------------
+# ThrottledSession
+#
+# yfinance accepts a custom requests.Session via Ticker(sym, session=...).
+# By subclassing Session and overriding request() we insert INTER_REQUEST_PAUSE
+# before EVERY HTTP call yfinance makes — not just the outer ticker loop.
+#
+# This matters because Ticker.history() does:
+#   1. GET /v1/test/getcrumb   (crumb fetch, ~1 req)
+#   2. GET /v8/finance/chart/  (OHLCV data, 1 req)
+#   3. Occasionally a cookie refresh (~1 req every N tickers)
+#
+# Without session-level throttling, those 2-3 reqs happen back-to-back in
+# <100ms, creating a burst. Yahoo's rate limiter counts raw HTTP requests,
+# not logical "ticker" requests — so THROTTLE_SECS between tickers is not
+# enough if each ticker fires 2-3 reqs at wire speed.
+#
+# last_request_time is a class variable (shared across all instances) so
+# a q1 request and a q2 request both count toward the same throttle.
+# ---------------------------------------------------------------------------
+class ThrottledSession(requests.Session):
+    """requests.Session that enforces a minimum gap between HTTP requests."""
+
+    _last_request_time: float = 0.0   # class-level: shared across instances
+
+    def __init__(self, extra_headers: dict | None = None):
+        super().__init__()
+        if extra_headers:
+            self.headers.update(extra_headers)
+
+    def request(self, method, url, **kwargs):  # noqa: D401
+        now     = time.monotonic()
+        elapsed = now - ThrottledSession._last_request_time
+        gap     = INTER_REQUEST_PAUSE - elapsed
+        if gap > 0:
+            time.sleep(gap)
+        ThrottledSession._last_request_time = time.monotonic()
+        return super().request(method, url, **kwargs)
+
+
+_SAFARI_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        "Version/17.2 Safari/605.1.15"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-GB,en;q=0.9",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +369,23 @@ PRICE_PERIOD  = "3y"
 #
 # query1 (default yfinance endpoint) and query2 (alternate subdomain) have
 # INDEPENDENT rate-limit counters. Both are tried before giving up.
+#
+# CRITICAL — index CBs are SEPARATE from stock CBs (BUG_15 fix):
+# The index fetch (^NSEI) is the very first Yahoo call in every run.
+# If it sets _YF_Q1_BLOCKED / _YF_Q2_BLOCKED, every stock is dead-skipped
+# before it even gets a chance. This happened in run 58890721487:
+#   12:07:49 index q1 → 429 → _YF_Q1_BLOCKED = True
+#   12:07:50 index q2 → 429 → _YF_Q2_BLOCKED = True
+#   12:07:50 HDFCBANK → both CBs already open → skipped (no request made)
+#   ... all 89 stocks × 1s throttle sleep = 89s wasted, 0 fetched
+#
+# Fix: index uses _IDX_Q1_BLOCKED / _IDX_Q2_BLOCKED (private to _fetch_index).
+# Stock CBs only open when a STOCK fetch hits 429. Index 429 → beta=None only.
 # ---------------------------------------------------------------------------
-_YF_Q1_BLOCKED = False
-_YF_Q2_BLOCKED = False
+_YF_Q1_BLOCKED  = False   # stock fetches (query1)
+_YF_Q2_BLOCKED  = False   # stock fetches (query2)
+_IDX_Q1_BLOCKED = False   # index fetch only
+_IDX_Q2_BLOCKED = False   # index fetch only
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +411,8 @@ def _strip_tz(prices: pd.Series) -> pd.Series:
 def _fetch_prices_yf_q1(yf_ticker: str, label: str) -> "pd.Series | None":
     """
     Fetch 3y close prices via yfinance (query1.finance.yahoo.com).
+    Uses ThrottledSession so every internal HTTP request (crumb + chart)
+    is spaced INTER_REQUEST_PAUSE seconds apart.
     Sets _YF_Q1_BLOCKED circuit breaker on first 429.
     """
     global _YF_Q1_BLOCKED
@@ -329,7 +421,8 @@ def _fetch_prices_yf_q1(yf_ticker: str, label: str) -> "pd.Series | None":
         return None
     try:
         import yfinance as yf
-        hist = yf.Ticker(yf_ticker).history(
+        sess = ThrottledSession(_SAFARI_HEADERS)
+        hist = yf.Ticker(yf_ticker, session=sess).history(
             period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
         )
         if hist is not None and not hist.empty and len(hist) > 10:
@@ -348,13 +441,18 @@ def _fetch_prices_yf_q1(yf_ticker: str, label: str) -> "pd.Series | None":
 
 
 def _fetch_index_yf_q1() -> "pd.Series | None":
-    """Fetch Nifty50 index via yfinance query1."""
-    global _YF_Q1_BLOCKED
-    if _YF_Q1_BLOCKED:
+    """
+    Fetch Nifty50 index via yfinance query1.
+    Uses ThrottledSession. Uses _IDX_Q1_BLOCKED — private to index fetches.
+    A 429 here does NOT open the stock circuit breaker (_YF_Q1_BLOCKED).
+    """
+    global _IDX_Q1_BLOCKED
+    if _IDX_Q1_BLOCKED:
         return None
     try:
         import yfinance as yf
-        hist = yf.Ticker("^NSEI").history(
+        sess = ThrottledSession(_SAFARI_HEADERS)
+        hist = yf.Ticker("^NSEI", session=sess).history(
             period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
         )
         if hist is not None and not hist.empty:
@@ -364,8 +462,8 @@ def _fetch_index_yf_q1() -> "pd.Series | None":
     except Exception as e:
         err = str(e)
         if "429" in err or "RateLimit" in err or "Too Many" in err:
-            _YF_Q1_BLOCKED = True
-            log.warning("  yf/q1 rate-limited on index — circuit breaker open")
+            _IDX_Q1_BLOCKED = True
+            log.warning("  yf/q1 rate-limited on index — beta/alpha will be None (stocks unaffected)")
         else:
             log.debug(f"  Nifty50-index yf/q1: {e}")
     return None
@@ -376,11 +474,11 @@ def _fetch_index_yf_q1() -> "pd.Series | None":
 # ---------------------------------------------------------------------------
 def _fetch_prices_yf_q2(yf_ticker: str, label: str) -> "pd.Series | None":
     """
-    Fetch via query2.finance.yahoo.com — a separate Yahoo subdomain with its
-    own rate-limit counter, independent of query1.
+    Fetch via query2.finance.yahoo.com — independent rate-limit pool from q1.
 
-    Implementation: pass a custom requests.Session to yfinance so the base URL
-    resolves to query2. The session also carries a Safari UA to reduce noise.
+    ThrottledSession ensures INTER_REQUEST_PAUSE between every HTTP call.
+    The class-level _last_request_time is shared with q1 sessions, so even
+    when q1 fails and we fall through to q2, the pause still applies.
     """
     global _YF_Q2_BLOCKED
     if _YF_Q2_BLOCKED:
@@ -390,22 +488,12 @@ def _fetch_prices_yf_q2(yf_ticker: str, label: str) -> "pd.Series | None":
         import yfinance as yf
         import yfinance.base as _yfbase
 
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) "
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-                "Version/17.2 Safari/605.1.15"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        })
-
-        ticker = yf.Ticker(yf_ticker, session=session)
+        sess  = ThrottledSession(_SAFARI_HEADERS)
         _orig = getattr(_yfbase, "YF_URL", None)
         try:
             if hasattr(_yfbase, "YF_URL"):
                 _yfbase.YF_URL = "https://query2.finance.yahoo.com"
-            hist = ticker.history(
+            hist = yf.Ticker(yf_ticker, session=sess).history(
                 period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
             )
         finally:
@@ -431,28 +519,23 @@ def _fetch_prices_yf_q2(yf_ticker: str, label: str) -> "pd.Series | None":
 
 
 def _fetch_index_yf_q2() -> "pd.Series | None":
-    """Fetch Nifty50 index via yfinance query2."""
-    global _YF_Q2_BLOCKED
-    if _YF_Q2_BLOCKED:
+    """
+    Fetch Nifty50 index via yfinance query2.
+    Uses ThrottledSession + _IDX_Q2_BLOCKED. Index 429 never opens stock CB.
+    """
+    global _IDX_Q2_BLOCKED
+    if _IDX_Q2_BLOCKED:
         return None
     try:
         import yfinance as yf
         import yfinance.base as _yfbase
 
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2_1) "
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-                "Version/17.2 Safari/605.1.15"
-            ),
-        })
-        ticker = yf.Ticker("^NSEI", session=session)
+        sess  = ThrottledSession(_SAFARI_HEADERS)
         _orig = getattr(_yfbase, "YF_URL", None)
         try:
             if hasattr(_yfbase, "YF_URL"):
                 _yfbase.YF_URL = "https://query2.finance.yahoo.com"
-            hist = ticker.history(
+            hist = yf.Ticker("^NSEI", session=sess).history(
                 period=PRICE_PERIOD, auto_adjust=True, actions=False, timeout=25
             )
         finally:
@@ -469,8 +552,8 @@ def _fetch_index_yf_q2() -> "pd.Series | None":
     except Exception as e:
         err = str(e)
         if "429" in err or "RateLimit" in err or "Too Many" in err:
-            _YF_Q2_BLOCKED = True
-            log.warning("  yf/q2 rate-limited on index — circuit breaker open")
+            _IDX_Q2_BLOCKED = True
+            log.warning("  yf/q2 rate-limited on index — beta/alpha will be None (stocks unaffected)")
         else:
             log.debug(f"  Nifty50-index yf/q2: {e}")
     return None
@@ -648,8 +731,9 @@ def harvest(extra_tickers=None, tickers=None):
     log.info("Fetching Nifty50 index (^NSEI)...")
     idx_prices = _fetch_index()
     idx_ret    = idx_prices.pct_change().dropna() if idx_prices is not None else None
+
     if idx_ret is None:
-        log.warning("Index unavailable — beta/alpha will be None for all stocks")
+        log.warning("Index unavailable (rate-limited or error) — beta/alpha will be None. Stocks will still be fetched.")
 
     snapshot     = []
     fundamentals = {}
@@ -706,7 +790,10 @@ def harvest(extra_tickers=None, tickers=None):
             fundamentals[ticker] = _fetch_fundamentals(meta.get("yf", f"{ticker}.NS"))
 
         success += 1
-        time.sleep(THROTTLE_SECS)
+        # Skip throttle when both breakers are open — _fetch_prices()
+        # returns None instantly (no network call), no need to wait.
+        if not (_YF_Q1_BLOCKED and _YF_Q2_BLOCKED):
+            time.sleep(THROTTLE_SECS)
 
     # ── Write / merge snapshot ────────────────────────────────────────────────
     # BUG_12: zero-fetch runs (all sources blocked) must NOT overwrite the
@@ -715,8 +802,8 @@ def harvest(extra_tickers=None, tickers=None):
     if not snapshot:
         log.warning(
             "Zero stocks fetched — preserving existing snapshot. "
-            "Both yf/q1 and yf/q2 were rate-limited. "
-            f"q1_blocked={_YF_Q1_BLOCKED}, q2_blocked={_YF_Q2_BLOCKED}"
+            f"q1_blocked={_YF_Q1_BLOCKED}, q2_blocked={_YF_Q2_BLOCKED}, "
+            f"idx_q1_blocked={_IDX_Q1_BLOCKED}, idx_q2_blocked={_IDX_Q2_BLOCKED}"
         )
         gs.write_metadata(0, [], run_id)
         return {
