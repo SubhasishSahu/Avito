@@ -1,24 +1,22 @@
 """
 pages/00_Landing.py
 ════════════════════════════════════════════════════════════════
-P0 · Global Market Map — the new entry point.
+P0 · Global Market Map
 
-Renders landing.html (flat SVG world map with clickable index
-dots) via st.components.v1.html().
+Uses st.components.v1.declare_component() instead of
+components.html() so that the JS setComponentValue protocol
+actually triggers a Python rerun and returns the selection.
 
-Listens for postMessage from the iframe:
-  { type:'AVITO_CONTEXT', indices:[...], sectors:[...] }
-
-On receiving it, stores to st.session_state and switches to
-the Context page (00a_Context.py).
+The HTML is served from assets/ via a tiny temp-dir trick:
+we write a symlink/copy to a temp dir and declare_component
+points at it. On Community Cloud this works because the
+component HTML is served from the same origin as the app.
 ════════════════════════════════════════════════════════════════
 """
-import sys, pathlib
+import sys, pathlib, json, tempfile, shutil, os
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-import json
 import streamlit as st
-import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="AVITO · Global Markets",
@@ -30,77 +28,55 @@ st.set_page_config(
 from core.page_setup import apply; apply()
 from core.context_data import get_indices, get_sectors, get_commodity_flags
 
-# ── load template ──────────────────────────────────────────────
-_LANDING = pathlib.Path(__file__).parent.parent / "assets" / "landing.html"
+# ── prepare injected HTML ─────────────────────────────────────
+_TEMPLATE = pathlib.Path(__file__).parent.parent / "assets" / "landing.html"
 
 def _inject(html, key, val):
-    import json
     return html.replace(f"__{key}__", json.dumps(val, default=str))
 
-html = _LANDING.read_text(encoding="utf-8")
+html = _TEMPLATE.read_text(encoding="utf-8")
 html = _inject(html, "INDICES",         get_indices())
 html = _inject(html, "SECTORS",         get_sectors())
 html = _inject(html, "COMMODITY_FLAGS", get_commodity_flags())
 
-# ── render ─────────────────────────────────────────────────────
-# Inject a bridge script that forwards postMessage to Streamlit
-# via URL hash change (Streamlit detects this via st.query_params)
-bridge = """
-<script>
-window.addEventListener('message', function(e){
-  try {
-    const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-    if(d && d.type === 'AVITO_CONTEXT'){
-      // encode context into URL hash for Streamlit to read
-      const enc = encodeURIComponent(JSON.stringify(d));
-      window.parent.location.hash = 'ctx=' + enc;
-    }
-    if(d && d.type === 'AVITO_NAV' && d.page === 'dashboard'){
-      const enc = encodeURIComponent(JSON.stringify(d));
-      window.parent.location.hash = 'nav=' + enc;
-    }
-  } catch(err){}
-});
-</script>
-"""
-html = html.replace("</body>", bridge + "</body>")
+# ── write to temp component directory ────────────────────────
+# declare_component needs a directory with index.html
+# We cache the directory path in session_state so it survives reruns
+if "comp_dir" not in st.session_state:
+    tmp = tempfile.mkdtemp(prefix="avito_landing_")
+    st.session_state["comp_dir"] = tmp
 
-components.html(html, height=920, scrolling=False)
+comp_dir = st.session_state["comp_dir"]
+index_path = os.path.join(comp_dir, "index.html")
 
-# ── detect hash change via query param workaround ──────────────
-# Streamlit doesn't expose window.location.hash directly.
-# We use a small JS snippet that writes to a hidden Streamlit
-# text_input via the Streamlit component setValue mechanism,
-# allowing us to read the selection in the next rerun.
+# Always write fresh so data injection stays current
+with open(index_path, "w", encoding="utf-8") as f:
+    f.write(html)
 
-st.markdown("""
-<script>
-// Poll for hash changes and push to Streamlit via URL param
-(function(){
-  let last = '';
-  setInterval(function(){
-    const h = window.location.hash;
-    if(h && h !== last && h.startsWith('#ctx=')){
-      last = h;
-      const params = new URLSearchParams(window.location.search);
-      const ctx = decodeURIComponent(h.replace('#ctx=',''));
-      // Navigate to context page via Streamlit's own router
-      const url = new URL(window.location.href);
-      url.searchParams.set('avito_ctx', ctx);
-      url.hash = '';
-      window.location.href = url.href;
-    }
-  }, 300);
-})();
-</script>
-""", unsafe_allow_html=True)
+# ── declare the component ─────────────────────────────────────
+import streamlit.components.v1 as components
 
-# ── read context from query params if set ─────────────────────
-params = st.query_params
-if "avito_ctx" in params:
+# declare_component returns a callable; calling it renders the component
+# and returns whatever value JS sent via setComponentValue
+_landing_component = components.declare_component(
+    "avito_landing",
+    path=comp_dir,
+)
+
+result = _landing_component(key="landing_map", default=None, height=920)
+
+# ── handle result ─────────────────────────────────────────────
+# result is None until user clicks "OPEN DASHBOARD →"
+# then it becomes the payload dict: {indices, sectors, members, ts}
+if result is not None:
     try:
-        ctx = json.loads(params["avito_ctx"])
-        st.session_state["avito_context"] = ctx
-        st.switch_page("pages/00a_Context.py")
-    except Exception:
-        pass
+        # result may be a dict already or a JSON string
+        ctx = result if isinstance(result, dict) else json.loads(result)
+        if ctx.get("indices"):          # only proceed if real selection
+            st.session_state["avito_context"] = ctx
+            st.session_state["avito_sectors"] = ctx.get("sectors", [])
+            st.session_state["avito_indices"] = ctx.get("indices", [])
+            st.session_state["avito_members"] = ctx.get("members", [])
+            st.switch_page("pages/00a_Context.py")
+    except Exception as exc:
+        st.error(f"Navigation error: {exc}")
