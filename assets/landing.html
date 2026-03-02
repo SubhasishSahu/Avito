@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AVITO · Market Intelligence</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,300&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>AVITO · Global Markets</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#070a0d; --s1:#0b0f14; --s2:#0f1520; --s3:#141c28;
@@ -14,269 +14,207 @@
   --text:#b8cce0; --t2:#6a8aa8; --t3:#3d5570;
   --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
-  height:100%;background:var(--bg);color:var(--text);
-  font-family:var(--sans);font-size:13px;
-  /* NO overflow:hidden — lets Streamlit iframe behave */
-}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
+body::after{content:'';position:fixed;inset:0;z-index:9000;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 4px)}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(26,37,53,.25) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(26,37,53,.25) 1px,transparent 1px);
+  background-size:44px 44px}
 
-/* CRT scanlines — pointer-events:none is already set */
-body::after{
-  content:'';position:fixed;inset:0;z-index:9000;pointer-events:none;
-  background:repeating-linear-gradient(
-    0deg,transparent,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 4px
-  )
-}
-/* grid bg — pointer-events:none */
-body::before{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:
-    linear-gradient(rgba(26,37,53,.28) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(26,37,53,.28) 1px,transparent 1px);
-  background-size:44px 44px
-}
-
-/* ── SHELL ── */
-#shell{position:relative;height:100vh;display:flex;flex-direction:column;z-index:1}
+#shell{position:relative;height:100vh;display:flex;flex-direction:column;z-index:1;overflow:hidden}
 
 /* ── TOPBAR ── */
-#top{
-  height:44px;flex-shrink:0;
-  background:rgba(11,15,20,.96);border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;padding:0 20px;gap:14px;
-  /* NO backdrop-filter — causes stacking context issues in iframes */
-}
-.t-pulse{
-  width:7px;height:7px;border-radius:50%;flex-shrink:0;
-  background:var(--green);box-shadow:0 0 8px var(--green);
-  animation:pulse 2.5s ease-in-out infinite
-}
+#top{height:44px;flex-shrink:0;background:rgba(11,15,20,.98);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 16px;gap:12px}
+.t-pulse{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.15;box-shadow:none}}
 .t-name{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--green);letter-spacing:.1em}
-.t-sub{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase}
-.t-sep{width:1px;height:18px;background:var(--bd);margin:0 2px;flex-shrink:0}
+.t-sub{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase}
+.t-sep{width:1px;height:18px;background:var(--bd);flex-shrink:0}
 .t-sp{flex:1}
-.t-pill{
-  font-family:var(--mono);font-size:8px;padding:3px 9px;border-radius:2px;
-  border:1px solid var(--bd2);color:var(--t3);
-  text-transform:uppercase;letter-spacing:.07em;white-space:nowrap
-}
-.t-pill.on{border-color:rgba(0,229,160,.3);color:var(--green);background:rgba(0,229,160,.04)}
+.t-pill{font-family:var(--mono);font-size:8px;padding:3px 9px;border-radius:2px;
+  border:1px solid var(--bd2);color:var(--t3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+.t-pill.on{border-color:rgba(0,229,160,.3);color:var(--green);background:rgba(0,229,160,.06)}
 .t-pill.a{border-color:rgba(245,166,35,.3);color:var(--amber)}
 
 /* ── MAIN ── */
-#main{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column}
+#main{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;min-height:0}
 
-/* ── MAP WRAP ── */
-#map-wrap{
-  flex:1;position:relative;min-height:0;
-  /* explicit cursor on the wrap so hover works everywhere */
-  cursor:crosshair;
-}
+/* ── MAP ── */
+#map-wrap{flex:1;position:relative;min-height:0;touch-action:none}
+#map-svg{width:100%;height:100%;display:block;pointer-events:all}
 
-/* ── THE SVG MAP ── */
-#map-svg{
-  width:100%;height:100%;display:block;
-  /* pointer-events on SVG must be ALL so clicks reach child elements */
-  pointer-events:all;
-}
+/* All background SVG layers — zero interactivity */
+.bg-layer{pointer-events:none}
+.continent{fill:rgba(18,26,38,.72);stroke:rgba(56,182,255,.09);stroke-width:.6;pointer-events:none}
+.graticule{stroke:rgba(26,37,53,.45);stroke-width:.4;fill:none;pointer-events:none}
+.equator{stroke:rgba(56,182,255,.1);stroke-width:.6;fill:none;stroke-dasharray:5 9;pointer-events:none}
+.flow-line{stroke-dasharray:6 5;stroke-width:.8;fill:none;pointer-events:none;
+  animation:dash 16s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-66}}
 
-/* ── CONTINENT LAYER — absolutely NO click interception ── */
-.bg-layer{pointer-events:none !important}
-.continent{
-  fill:rgba(20,28,40,.65);
-  stroke:rgba(56,182,255,.1);stroke-width:.7;
-  /* pointer-events:none on individual shapes too */
-  pointer-events:none;
-}
-.graticule{stroke:rgba(26,37,53,.5);stroke-width:.4;fill:none;pointer-events:none}
-.equator{stroke:rgba(56,182,255,.12);stroke-width:.7;fill:none;
-  stroke-dasharray:5 9;pointer-events:none}
-.flow-line{
-  stroke-dasharray:6 5;stroke-width:.9;fill:none;
-  pointer-events:none;            /* ← CRITICAL: never intercept clicks */
-  animation:dash 14s linear infinite;
-}
-@keyframes dash{to{stroke-dashoffset:-55}}
+/* ── CLUSTER DOTS ── */
+/* Each cluster = <g class="cluster"> containing:
+   .c-aura   — large ambient glow (pointer-events:none)
+   .c-ring   — animated ring     (pointer-events:none)
+   .c-dot    — visible fill dot  (pointer-events:none)
+   .c-label  — text label        (pointer-events:none)
+   .c-hit    — LARGE invisible hit circle (pointer-events:all) ← only interactive element
+*/
+.cluster{cursor:pointer}
+.c-aura{pointer-events:none;transition:opacity .3s}
+.c-ring{pointer-events:none;fill:none;stroke-width:1;opacity:0;
+  transform-origin:center center;transition:opacity .25s;
+  animation:ring-spin 3s ease-in-out infinite}
+@keyframes ring-spin{0%,100%{opacity:.5}50%{opacity:1}}
+.c-dot{pointer-events:none;transition:r .2s}
+.c-label{pointer-events:none;font-family:var(--mono);font-size:7px;
+  fill:rgba(184,204,224,.5);letter-spacing:.03em;transition:fill .2s}
+.c-count{pointer-events:none;font-family:var(--mono);font-size:5.5px;
+  fill:rgba(184,204,224,.35);letter-spacing:.02em}
+/* large transparent hit circle — ALL pointer events go here */
+.c-hit{fill:transparent;pointer-events:all;cursor:pointer}
 
-/* ── DOT LAYER — all interactable ── */
-.hit-area{
-  fill:transparent;              /* invisible — just expands click area */
-  cursor:pointer;
-  pointer-events:all;
-}
-.dot-ring{
-  fill:none;stroke-width:1;
-  opacity:0;transform-origin:center;
-  pointer-events:none;            /* ring is decoration, not interactive */
-  transition:opacity .25s;
-}
-.dot-core{
-  pointer-events:none;            /* click goes to .hit-area above */
-  transition:r .2s,opacity .2s;
-}
-.dot-label{
-  pointer-events:none;
-  font-family:var(--mono);font-size:6.5px;
-  fill:rgba(184,204,224,.55);letter-spacing:.03em;
-  transition:fill .18s;
-}
+/* hover/selected states toggled by JS adding class to <g> */
+.cluster.hover .c-ring,.cluster.sel .c-ring{opacity:1}
+.cluster.hover .c-label,.cluster.sel .c-label{fill:rgba(184,204,224,1)}
+.cluster.sel .c-dot{filter:brightness(1.6) drop-shadow(0 0 6px currentColor)}
+.cluster.hover .c-dot{filter:brightness(1.3)}
+.cluster.sel .c-aura{opacity:.25}
+.cluster.hover .c-aura{opacity:.15}
 
-/* hover / selected states via class on <g> */
-.idx-grp.hover .dot-ring,
-.idx-grp.selected .dot-ring{opacity:.7;animation:ring-pulse 2.2s ease-in-out infinite}
-@keyframes ring-pulse{0%,100%{opacity:.55}50%{opacity:1}}
-.idx-grp.hover .dot-label,
-.idx-grp.selected .dot-label{fill:rgba(184,204,224,1)}
-.idx-grp.selected .dot-core{opacity:1;filter:brightness(1.5)}
-.idx-grp.hover .dot-core{opacity:.85;filter:brightness(1.25)}
+/* ── RIPPLE (touch feedback) ── */
+.ripple{pointer-events:none;fill:none;stroke-width:1.5;
+  animation:rip .5s ease-out forwards}
+@keyframes rip{
+  from{r:6;opacity:.9;stroke-width:2}
+  to{r:28;opacity:0;stroke-width:.5}
+}
 
 /* ── TOOLTIP ── */
-#tooltip{
-  position:absolute;z-index:500;pointer-events:none;
-  background:rgba(9,13,18,.97);border:1px solid var(--bd2);
-  border-radius:7px;padding:10px 13px;
-  font-family:var(--mono);font-size:10px;color:var(--text);
-  box-shadow:0 10px 40px rgba(0,0,0,.6);
-  opacity:0;transition:opacity .12s;white-space:nowrap;
-  max-width:230px;white-space:normal;
-}
-#tooltip.show{opacity:1}
-.tt-name{font-size:12px;font-weight:600;color:var(--green);margin-bottom:3px}
-.tt-meta{font-size:9px;color:var(--t2);margin-bottom:3px}
-.tt-secs{font-size:8px;color:var(--t3)}
-.tt-hint{
-  font-size:8px;color:var(--amber);margin-top:5px;
-  border-top:1px solid var(--bd);padding-top:5px
-}
+#tt{position:absolute;z-index:600;pointer-events:none;
+  background:rgba(7,10,13,.97);border:1px solid var(--bd2);border-radius:8px;
+  padding:10px 13px;font-family:var(--mono);font-size:10px;color:var(--text);
+  box-shadow:0 12px 48px rgba(0,0,0,.65);opacity:0;transition:opacity .12s;
+  max-width:240px;min-width:160px}
+#tt.show{opacity:1}
+.tt-name{font-size:12px;font-weight:600;color:var(--green);margin-bottom:4px}
+.tt-exch{font-size:8px;color:var(--t3);margin-bottom:6px;letter-spacing:.06em}
+.tt-members{display:flex;flex-direction:column;gap:3px;margin-bottom:6px}
+.tt-mem{font-size:9px;color:var(--t2)}
+.tt-mem span{color:var(--text)}
+.tt-secs{font-size:8px;color:var(--t3);border-top:1px solid var(--bd);padding-top:5px;margin-top:3px}
+.tt-hint{font-size:8px;color:var(--amber);margin-top:4px}
 
 /* ── LEGEND ── */
-#legend{
-  position:absolute;top:8px;right:10px;z-index:200;
-  background:rgba(7,10,13,.92);border:1px solid var(--bd);
-  border-radius:6px;padding:10px 12px;
-  pointer-events:none;  /* legend never blocks clicks */
-}
+#legend{position:absolute;top:8px;right:10px;z-index:200;pointer-events:none;
+  background:rgba(7,10,13,.92);border:1px solid var(--bd);border-radius:6px;padding:10px 12px}
 .leg-ttl{font-family:var(--mono);font-size:7px;letter-spacing:.15em;
   text-transform:uppercase;color:var(--t3);margin-bottom:7px}
 .leg-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;
   font-family:var(--mono);font-size:8px;color:var(--t2)}
-.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.leg-dash{width:18px;height:0;border-top:1px dashed;flex-shrink:0;opacity:.55}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.leg-dash{width:18px;height:0;border-top:1px dashed;flex-shrink:0;opacity:.5}
 
-/* ── INSTRUCTION BAR (replaces selected-badges overlay) ── */
+/* ── INSTRUCTION BAR ── */
 #instr{
   position:absolute;bottom:0;left:0;right:0;
-  background:rgba(7,10,13,.9);border-top:1px solid var(--bd);
-  padding:7px 16px;
-  display:flex;align-items:center;gap:10px;
-  font-family:var(--mono);font-size:9px;color:var(--t3);
-  pointer-events:none;z-index:100;
-  transition:all .3s;
+  background:rgba(7,10,13,.92);border-top:1px solid var(--bd);
+  padding:7px 16px;z-index:150;pointer-events:none;
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:9px;color:var(--t3)
 }
-#instr-msg{flex:1}
-#instr-sel{color:var(--green)}
+#instr-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0;
+  animation:pulse 2.5s ease-in-out infinite}
+#instr-sel{color:var(--green);margin-left:auto}
 
 /* ── SLIDE-UP PANEL ── */
 #panel{
   position:absolute;bottom:0;left:0;right:0;
-  background:rgba(7,10,13,.98);
-  border-top:1px solid var(--bd);
-  transform:translateY(100%);
-  transition:transform .38s cubic-bezier(.16,1,.3,1);
-  z-index:300;
-  max-height:64vh;
-  display:flex;flex-direction:column;
+  background:rgba(6,9,12,.99);border-top:1px solid var(--bd);
+  transform:translateY(100%);transition:transform .38s cubic-bezier(.16,1,.3,1);
+  z-index:400;max-height:66vh;display:flex;flex-direction:column;
 }
 #panel.open{transform:translateY(0)}
-
-/* panel header */
 #panel-hd{
-  padding:11px 18px 9px;border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;gap:12px;flex-shrink:0;
+  padding:11px 16px 9px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
 }
-.ph-tag{font-family:var(--mono);font-size:8px;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--t3)}
-.ph-ttl{font-size:12px;font-weight:500;color:var(--text)}
-.ph-cnt{font-family:var(--mono);font-size:9px;color:var(--green);margin-left:6px}
-#btn-close{
-  margin-left:auto;width:26px;height:26px;border-radius:4px;
-  background:var(--s2);border:1px solid var(--bd2);
-  color:var(--t2);cursor:pointer;font-size:13px;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:all .15s;
-}
-#btn-close:hover{border-color:var(--red);color:var(--red)}
+.ph-tag{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+.ph-ttl{font-size:12px;color:var(--text)}
+.ph-cnt{font-family:var(--mono);font-size:9px;color:var(--green);margin-left:5px}
+#btn-close{margin-left:auto;width:26px;height:26px;border-radius:4px;
+  background:transparent;border:1px solid var(--bd2);color:var(--t2);cursor:pointer;
+  font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:all .15s;touch-action:manipulation}
+#btn-close:hover,#btn-close:active{border-color:var(--red);color:var(--red)}
 
-/* panel body */
-#panel-body{
-  flex:1;overflow-y:auto;padding:14px 18px;
-  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;
-}
+#panel-body{flex:1;overflow-y:auto;padding:14px 16px;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
 
-.pl{font-family:var(--mono);font-size:8px;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--t3);margin-bottom:8px}
+.pl{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:8px;margin-top:12px}
+.pl:first-child{margin-top:0}
 
-/* selected index chips */
-.idx-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
-.idx-chip{
-  display:flex;align-items:center;gap:5px;
-  padding:5px 10px;border-radius:3px;
-  font-family:var(--mono);font-size:9px;
-  border:1px solid rgba(56,182,255,.35);
+/* selected cluster chips */
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+.chip{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:3px;
+  font-family:var(--mono);font-size:9px;border:1px solid rgba(56,182,255,.35);
   background:rgba(56,182,255,.07);color:var(--blue);
-  cursor:pointer;transition:all .15s;user-select:none;
-}
-.idx-chip:hover{border-color:var(--red);color:var(--red)}
-.icdot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+  cursor:pointer;transition:all .15s;touch-action:manipulation;user-select:none}
+.chip:hover,.chip:active{border-color:var(--red);color:var(--red)}
+.chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+/* member sub-index list */
+.members-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+.mem-tag{font-family:var(--mono);font-size:8px;padding:2px 7px;border-radius:2px;
+  background:var(--s2);border:1px solid var(--bd2);color:var(--t3)}
 
 /* sector tiles */
-.sector-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
-.sec-tile{
-  display:flex;align-items:center;gap:6px;padding:6px 11px;
-  border-radius:4px;border:1px solid var(--bd2);background:var(--s2);
-  cursor:pointer;transition:all .18s;user-select:none;
+.sec-grid{display:flex;flex-wrap:wrap;gap:6px}
+.sec{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:4px;
+  border:1px solid var(--bd2);background:var(--s2);
   font-family:var(--mono);font-size:9px;color:var(--t2);
-}
-.sec-tile:hover{transform:translateY(-1px)}
-.sec-tile.on{border-color:currentColor;background:color-mix(in srgb,currentColor 9%,transparent)}
-.sec-tile.dim{opacity:.28;pointer-events:none}
+  cursor:pointer;transition:all .18s;touch-action:manipulation;user-select:none}
+.sec:hover,.sec:active{transform:translateY(-1px)}
+.sec.on{border-color:currentColor;background:color-mix(in srgb,currentColor 10%,transparent)}
+.sec.dim{opacity:.25;pointer-events:none}
 
-/* commodity strip */
-.com-strip{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px}
-.com-flag{
-  display:flex;align-items:center;gap:5px;
-  padding:5px 9px;border-radius:3px;
-  font-family:var(--mono);font-size:8px;
-  border:1px solid var(--bd);background:var(--s2);color:var(--t3);
-}
-.com-flag.lit{border-color:rgba(245,166,35,.4);color:var(--amber);background:rgba(245,166,35,.06)}
+/* commodity flags */
+.com-strip{display:flex;flex-wrap:wrap;gap:6px}
+.com{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:3px;
+  font-family:var(--mono);font-size:8px;border:1px solid var(--bd);
+  background:var(--s2);color:var(--t3);cursor:default}
+.com.lit{border-color:rgba(245,166,35,.4);color:var(--amber);background:rgba(245,166,35,.06)}
 
-/* CTA footer */
+/* ── CTA ── */
 #panel-cta{
-  padding:10px 18px;border-top:1px solid var(--bd);
+  padding:10px 16px;border-top:1px solid var(--bd);
   display:flex;align-items:center;gap:10px;flex-shrink:0;
 }
 #btn-enter{
-  padding:8px 22px;background:var(--green);border:none;color:#000;
-  border-radius:5px;font-family:var(--mono);font-size:10px;
-  font-weight:700;letter-spacing:.1em;cursor:pointer;
+  padding:10px 24px;background:var(--green);border:none;color:#000;
+  border-radius:5px;font-family:var(--mono);font-size:10px;font-weight:700;
+  letter-spacing:.1em;cursor:pointer;touch-action:manipulation;
   transition:opacity .2s,transform .15s;
+  /* minimum 44px touch target height */
+  min-height:44px;
 }
-#btn-enter:hover{opacity:.85;transform:translateY(-1px)}
-#btn-enter:disabled{opacity:.25;cursor:not-allowed;transform:none}
-.cta-note{font-family:var(--mono);font-size:9px;color:var(--t3)}
-#cta-sel{font-family:var(--mono);font-size:9px;color:var(--green);margin-left:auto}
+#btn-enter:hover,#btn-enter:active{opacity:.85;transform:scale(.98)}
+#btn-enter:disabled{opacity:.22;cursor:not-allowed;transform:none;background:var(--t3)}
+.cta-note{font-family:var(--mono);font-size:9px;color:var(--t3);flex:1}
+#cta-sel{font-family:var(--mono);font-size:9px;color:var(--green);text-align:right}
 
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--bd2)}
 </style>
 </head>
 <body>
 <div id="shell">
 
-<!-- ═══ TOPBAR ═══ -->
+<!-- TOPBAR -->
 <div id="top">
   <div class="t-pulse"></div>
   <div>
@@ -285,41 +223,49 @@ body::before{
   <div class="t-sep"></div>
   <div class="t-sub">Global Market Intelligence</div>
   <div class="t-sp"></div>
-  <div class="t-pill on">● 77 stocks · NSE</div>
+  <div class="t-pill on">● 77 stocks · Live</div>
   <div class="t-pill a" id="t-clk">--:-- IST</div>
 </div>
 
-<!-- ═══ MAIN ═══ -->
+<!-- MAIN -->
 <div id="main">
 
   <!-- Tooltip -->
-  <div id="tooltip">
+  <div id="tt">
     <div class="tt-name" id="tt-n"></div>
-    <div class="tt-meta" id="tt-m"></div>
+    <div class="tt-exch" id="tt-e"></div>
+    <div class="tt-members" id="tt-ms"></div>
     <div class="tt-secs" id="tt-s"></div>
     <div class="tt-hint" id="tt-h"></div>
   </div>
 
   <!-- Legend -->
   <div id="legend">
-    <div class="leg-ttl">// Index Groups</div>
+    <div class="leg-ttl">// Market Regions</div>
     <div class="leg-row"><div class="leg-dot" style="background:#38b6ff"></div>India</div>
     <div class="leg-row"><div class="leg-dot" style="background:#a78bfa"></div>Asia-Pacific</div>
     <div class="leg-row"><div class="leg-dot" style="background:#00e5a0"></div>Europe</div>
     <div class="leg-row"><div class="leg-dot" style="background:#f5a623"></div>Americas</div>
     <div class="leg-row"><div class="leg-dot" style="background:#ff4757"></div>Mid East · Africa</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodity Hub</div>
-    <div class="leg-row"><div class="leg-dash" style="border-color:#f5a623"></div>Trade / commodity flow</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodities</div>
+    <div class="leg-row"><div class="leg-dash" style="border-color:#f5a623"></div>Trade flow</div>
   </div>
 
-  <!-- MAP -->
+  <!-- Instruction bar -->
+  <div id="instr">
+    <div id="instr-dot"></div>
+    <span id="instr-msg">Tap any region dot to build your market context</span>
+    <span id="instr-sel"></span>
+  </div>
+
+  <!-- SVG MAP -->
   <div id="map-wrap">
     <svg id="map-svg" viewBox="0 0 1000 510" preserveAspectRatio="xMidYMid meet">
 
-      <!-- ═══ LAYER 0: ocean fill ═══ -->
-      <rect width="1000" height="510" fill="#040709" pointer-events="none"/>
+      <!-- Ocean -->
+      <rect width="1000" height="510" fill="#03050a" pointer-events="none"/>
 
-      <!-- ═══ LAYER 1: graticule + equator — NO pointer events ═══ -->
+      <!-- Graticule + equator — NO pointer events -->
       <g class="bg-layer">
         <g class="graticule">
           <line x1="0" y1="85"  x2="1000" y2="85"/>
@@ -327,115 +273,78 @@ body::before{
           <line x1="0" y1="255" x2="1000" y2="255"/>
           <line x1="0" y1="340" x2="1000" y2="340"/>
           <line x1="0" y1="425" x2="1000" y2="425"/>
-          <line x1="83"  y1="0" x2="83"  y2="510"/>
-          <line x1="167" y1="0" x2="167" y2="510"/>
-          <line x1="250" y1="0" x2="250" y2="510"/>
-          <line x1="333" y1="0" x2="333" y2="510"/>
-          <line x1="417" y1="0" x2="417" y2="510"/>
-          <line x1="500" y1="0" x2="500" y2="510"/>
-          <line x1="583" y1="0" x2="583" y2="510"/>
-          <line x1="667" y1="0" x2="667" y2="510"/>
-          <line x1="750" y1="0" x2="750" y2="510"/>
-          <line x1="833" y1="0" x2="833" y2="510"/>
+          <line x1="83"  y1="0" x2="83"  y2="510"/><line x1="167" y1="0" x2="167" y2="510"/>
+          <line x1="250" y1="0" x2="250" y2="510"/><line x1="333" y1="0" x2="333" y2="510"/>
+          <line x1="417" y1="0" x2="417" y2="510"/><line x1="500" y1="0" x2="500" y2="510"/>
+          <line x1="583" y1="0" x2="583" y2="510"/><line x1="667" y1="0" x2="667" y2="510"/>
+          <line x1="750" y1="0" x2="750" y2="510"/><line x1="833" y1="0" x2="833" y2="510"/>
           <line x1="917" y1="0" x2="917" y2="510"/>
         </g>
         <line class="equator" x1="0" y1="255" x2="1000" y2="255"/>
       </g>
 
-      <!-- ═══ LAYER 2: continents — pointer-events:none on entire group ═══ -->
-      <g id="continents" style="pointer-events:none">
-        <!-- North America -->
+      <!-- Continents — pointer-events:none on whole group -->
+      <g class="bg-layer">
         <polygon class="continent" points="95,78 172,68 232,72 268,83 292,95 308,112 312,136 290,155 278,170 263,185 250,200 238,218 222,228 205,242 196,258 183,272 170,284 158,278 146,262 134,248 122,238 110,222 100,202 92,182 85,162 81,142 80,120 83,100 88,88"/>
-        <!-- Greenland -->
         <polygon class="continent" points="188,43 240,36 282,40 302,54 292,70 268,76 238,73 208,65 190,56"/>
-        <!-- South America -->
         <polygon class="continent" points="218,278 242,268 268,266 282,274 298,284 308,302 312,322 308,342 298,360 282,378 266,395 250,410 236,418 222,412 212,396 206,380 203,362 205,342 208,320 214,302 216,290"/>
-        <!-- Europe -->
         <polygon class="continent" points="388,78 422,70 458,66 488,70 514,76 528,88 522,104 510,115 494,120 478,124 462,128 444,130 426,126 408,118 394,108 386,96"/>
-        <!-- Scandinavia -->
         <polygon class="continent" points="448,66 464,53 480,50 494,56 490,66 474,70 458,68"/>
-        <!-- UK -->
         <polygon class="continent" points="413,93 424,86 432,90 428,101 416,103"/>
-        <!-- Africa -->
         <polygon class="continent" points="438,163 464,156 490,156 516,162 538,172 550,188 556,208 554,232 548,256 538,276 524,296 510,314 494,330 478,344 462,355 448,356 432,346 418,334 408,316 404,296 405,276 408,255 415,234 424,214 432,194 436,174"/>
-        <!-- Madagascar -->
         <polygon class="continent" points="545,292 556,282 564,292 560,313 550,320 540,310"/>
-        <!-- Middle East -->
         <polygon class="continent" points="528,182 548,176 566,172 582,176 592,186 594,198 586,210 572,216 556,213 542,203 532,193"/>
-        <!-- Indian subcontinent -->
         <polygon class="continent" points="612,193 636,183 660,181 678,186 690,196 696,213 693,232 682,250 668,263 654,270 640,265 627,252 615,238 608,220 609,205"/>
-        <!-- Southeast Asia peninsula -->
-        <polygon class="continent" points="728,222 750,212 768,216 776,228 773,243 760,250 744,246 730,236"/>
-        <!-- Sri Lanka -->
         <polygon class="continent" points="678,275 685,269 691,276 688,287 680,287"/>
-        <!-- Eurasia main -->
+        <polygon class="continent" points="728,222 750,212 768,216 776,228 773,243 760,250 744,246 730,236"/>
         <polygon class="continent" points="388,78 424,70 468,66 512,63 556,60 600,58 644,58 688,60 730,63 770,66 810,70 846,76 877,83 902,93 922,106 932,120 926,136 914,148 898,158 874,166 850,170 824,173 796,176 768,180 742,186 718,192 695,196 673,193 652,188 630,186 610,190 590,193 568,192 546,190 524,186 502,180 480,174 458,168 436,162 414,154 398,143 388,130 383,116 384,100"/>
-        <!-- Japan main -->
         <polygon class="continent" points="818,163 830,156 840,160 838,173 826,176 816,170"/>
         <polygon class="continent" points="833,146 843,140 851,146 847,156 836,156"/>
-        <!-- Australia -->
         <polygon class="continent" points="788,328 820,316 852,313 880,318 902,330 914,346 912,363 900,378 880,388 856,393 830,390 806,380 788,366 778,350 780,336"/>
       </g>
 
-      <!-- ═══ LAYER 3: commodity flow lines — pointer-events:none ═══ -->
-      <g id="flow-lines" style="pointer-events:none">
-        <!-- Brent/WTI to India -->
-        <line class="flow-line" x1="433" y1="140" x2="648" y2="252" stroke="#f5a623" opacity=".32"/>
-        <!-- Dubai to India -->
-        <line class="flow-line" x1="572" y1="254" x2="648" y2="252" stroke="#f5a623" opacity=".40" style="animation-delay:-3s"/>
-        <!-- WTI to India -->
-        <line class="flow-line" x1="198" y1="198" x2="648" y2="252" stroke="#f5a623" opacity=".20" style="animation-delay:-7s"/>
-        <!-- LME Copper to India -->
-        <line class="flow-line" x1="436" y1="145" x2="648" y2="252" stroke="#94a3b8" opacity=".28" style="animation-delay:-2s"/>
-        <!-- Shanghai to India (China metals) -->
-        <line class="flow-line" x1="784" y1="213" x2="648" y2="252" stroke="#94a3b8" opacity=".22" style="animation-delay:-5s"/>
-        <!-- SGX / Palm Oil to India -->
-        <line class="flow-line" x1="771" y1="287" x2="648" y2="252" stroke="#00e5a0" opacity=".22" style="animation-delay:-9s"/>
-        <!-- S&P → global signal to India -->
-        <line class="flow-line" x1="213" y1="193" x2="648" y2="252" stroke="#38b6ff" opacity=".14" style="animation-delay:-4s"/>
+      <!-- Commodity flow lines — pointer-events:none -->
+      <g class="bg-layer">
+        <line class="flow-line" x1="430" y1="136" x2="649" y2="254" stroke="#f5a623" opacity=".3"/>
+        <line class="flow-line" x1="565" y1="253" x2="649" y2="254" stroke="#f5a623" opacity=".4" style="animation-delay:-4s"/>
+        <line class="flow-line" x1="213" y1="192" x2="649" y2="254" stroke="#f5a623" opacity=".18" style="animation-delay:-8s"/>
+        <line class="flow-line" x1="424" y1="155" x2="649" y2="254" stroke="#94a3b8" opacity=".25" style="animation-delay:-2s"/>
+        <line class="flow-line" x1="791" y1="235" x2="649" y2="254" stroke="#94a3b8" opacity=".2"  style="animation-delay:-6s"/>
+        <line class="flow-line" x1="773" y1="289" x2="649" y2="254" stroke="#00e5a0" opacity=".18" style="animation-delay:-10s"/>
+        <line class="flow-line" x1="213" y1="192" x2="433" y2="148" stroke="#38b6ff" opacity=".1"  style="animation-delay:-3s"/>
       </g>
 
-      <!-- ═══ LAYER 4: INDEX DOTS — rendered last = always on top ═══ -->
-      <!-- Built entirely by JS into <g id="dots-layer"> -->
-      <g id="dots-layer"></g>
+      <!-- ═══ CLUSTER DOTS — built by JS, always rendered last (on top) ═══ -->
+      <g id="clusters-layer"></g>
+
+      <!-- Ripple effects layer -->
+      <g id="ripple-layer" pointer-events="none"></g>
 
     </svg>
-  </div><!-- /map-wrap -->
-
-  <!-- Instruction bar -->
-  <div id="instr">
-    <span>◎</span>
-    <span id="instr-msg">Click any index dot or commodity hub on the map to begin</span>
-    <span id="instr-sel"></span>
   </div>
 
-  <!-- ═══ SLIDE-UP PANEL ═══ -->
+  <!-- SLIDE-UP PANEL -->
   <div id="panel">
     <div id="panel-hd">
       <div>
         <div class="ph-tag">// Market Context Builder</div>
-        <div class="ph-ttl">Select markets<span class="ph-cnt" id="ph-cnt"></span></div>
+        <div class="ph-ttl">Select regions<span class="ph-cnt" id="ph-cnt"></span></div>
       </div>
       <button id="btn-close" onclick="closePanel()">✕</button>
     </div>
-
     <div id="panel-body">
-      <!-- chips for selected indices -->
-      <div class="pl">// Active markets — click × to remove</div>
-      <div class="idx-chips" id="idx-chips"></div>
-
-      <!-- sector tiles -->
-      <div class="pl">// Sector filter — toggle to narrow (default = all)</div>
-      <div class="sector-grid" id="sector-grid"></div>
-
-      <!-- commodity flags -->
-      <div class="pl">// Commodity sensitivity — lit flags = relevant to your selection</div>
+      <div class="pl">// Active selections — tap to remove</div>
+      <div class="chips" id="chips"></div>
+      <div class="pl" id="mem-label">// Indices included</div>
+      <div class="members-grid" id="members"></div>
+      <div class="pl">// Sector filter — tap to narrow (default = all)</div>
+      <div class="sec-grid" id="sec-grid"></div>
+      <div class="pl">// Commodity sensitivity</div>
       <div class="com-strip" id="com-strip"></div>
     </div>
-
     <div id="panel-cta">
-      <button id="btn-enter" disabled onclick="enterDashboard()">OPEN DASHBOARD →</button>
-      <span class="cta-note" id="cta-note">Select at least one market</span>
+      <button id="btn-enter" disabled onclick="go()">OPEN DASHBOARD →</button>
+      <span class="cta-note" id="cta-note">Select at least one region</span>
       <span id="cta-sel"></span>
     </div>
   </div>
@@ -445,322 +354,352 @@ body::before{
 
 <script>
 // ═══════════════════════════════════════════════════════
-// DATA — injected by Streamlit
+// DATA  (injected by Streamlit renderer)
 // ═══════════════════════════════════════════════════════
-const INDICES         = __INDICES__;
+const CLUSTERS        = __INDICES__;        // uses get_indices() which returns cluster records
 const SECTORS         = __SECTORS__;
 const COMMODITY_FLAGS = __COMMODITY_FLAGS__;
 
 // ═══════════════════════════════════════════════════════
-// CONSTANTS
+// GROUP CONFIG
 // ═══════════════════════════════════════════════════════
-const GRP = {
-  india:     {color:'#38b6ff', dotR:6,  ringR:12},
-  asia:      {color:'#a78bfa', dotR:5,  ringR:10},
-  europe:    {color:'#00e5a0', dotR:5,  ringR:10},
-  americas:  {color:'#f5a623', dotR:5,  ringR:10},
-  mideast:   {color:'#ff4757', dotR:4.5,ringR:9},
-  africa:    {color:'#ff4757', dotR:4,  ringR:8},
-  commodity: {color:'#f472b6', dotR:4,  ringR:8},
+const G = {
+  india:     {color:'#38b6ff', r:8,  ring:16, hit:24},
+  asia:      {color:'#a78bfa', r:6,  ring:12, hit:20},
+  europe:    {color:'#00e5a0', r:6,  ring:12, hit:20},
+  americas:  {color:'#f5a623', r:6,  ring:12, hit:20},
+  mideast:   {color:'#ff4757', r:5.5,ring:11, hit:18},
+  africa:    {color:'#ff4757', r:5,  ring:10, hit:16},
+  commodity: {color:'#f472b6', r:5,  ring:10, hit:18},
 };
-// hit-area radius (invisible circle — large for easy clicking)
-const HIT_R = {india:18, asia:14, europe:14, americas:14, mideast:12, africa:12, commodity:12};
 
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-const S = {
-  sel:     new Set(),   // selected index IDs
-  sectors: new Set(),   // selected sector IDs
-};
+const S = { sel: new Set(), sectors: new Set() };
 
 // ═══════════════════════════════════════════════════════
 // CLOCK
 // ═══════════════════════════════════════════════════════
+const clk = document.getElementById('t-clk');
 function tick(){
-  const t = new Date().toLocaleString('en-IN',
-    {timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  document.getElementById('t-clk').textContent = t + ' IST';
+  clk.textContent = new Date().toLocaleString('en-IN',
+    {timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) + ' IST';
 }
 setInterval(tick,1000); tick();
 
 // ═══════════════════════════════════════════════════════
-// BUILD DOTS
+// SVG HELPERS
 // ═══════════════════════════════════════════════════════
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-function el(tag, attrs={}){
-  const e = document.createElementNS(SVG_NS, tag);
-  for(const [k,v] of Object.entries(attrs)) e.setAttribute(k,v);
+const NS = 'http://www.w3.org/2000/svg';
+function se(tag, attrs={}){
+  const e = document.createElementNS(NS, tag);
+  Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));
   return e;
 }
 
-function buildDots(){
-  const layer = document.getElementById('dots-layer');
+// ═══════════════════════════════════════════════════════
+// BUILD CLUSTER DOTS
+// ═══════════════════════════════════════════════════════
+function buildClusters(){
+  const layer = document.getElementById('clusters-layer');
 
-  // Deduplicate overlapping groups — spread them slightly
-  const placed = {};
-  INDICES.forEach(idx => {
-    const k = `${Math.round(idx.x/8)*8}_${Math.round(idx.y/8)*8}`;
-    if(!placed[k]) placed[k] = [];
-    placed[k].push(idx);
-  });
+  CLUSTERS.forEach((cl, i) => {
+    const cfg = G[cl.group] || G.asia;
+    const col = cfg.color;
+    const cnt = (cl.members || []).length;
 
-  INDICES.forEach((idx, i) => {
-    const cfg   = GRP[idx.group] || GRP.asia;
-    const col   = cfg.color;
-    const dotR  = cfg.dotR;
-    const ringR = cfg.ringR;
-    const hitR  = HIT_R[idx.group] || 14;
+    const g = se('g', {id:'cl-'+cl.id, class:'cluster'});
 
-    const g = el('g', {id:'dot-'+idx.id, class:'idx-grp'});
-
-    // 1. Pulse ring (decoration, pointer-events:none via CSS)
-    const ring = el('circle', {
-      class:'dot-ring', cx:idx.x, cy:idx.y, r:ringR,
-      stroke:col, 'stroke-width':'1', fill:'none',
-    });
-    ring.style.animationDelay = (i*0.22 % 4)+'s';
-
-    // 2. Visible dot
-    const dot = el('circle', {
-      class:'dot-core', cx:idx.x, cy:idx.y, r:dotR, fill:col,
+    // Ambient glow aura
+    const aura = se('circle', {
+      class:'c-aura', cx:cl.x, cy:cl.y, r:cfg.ring+4,
+      fill:col, opacity:'.06',
     });
 
-    // 3. Label
-    const labelX = idx.x > 780 ? idx.x - dotR - 3 : idx.x + dotR + 3;
-    const anchor  = idx.x > 780 ? 'end' : 'start';
-    const labelY  = idx.y - dotR - 2;
-    const lbl = el('text', {
-      class:'dot-label', x:labelX, y:labelY,
-      'text-anchor':anchor,
+    // Animated ring
+    const ring = se('circle', {
+      class:'c-ring', cx:cl.x, cy:cl.y, r:cfg.ring,
+      stroke:col,
     });
-    lbl.textContent = idx.label;
+    ring.style.animationDelay = (i * 0.28 % 3) + 's';
 
-    // 4. LARGE INVISIBLE HIT AREA — this is what actually receives clicks
-    //    Placed last so it is the topmost element in the group,
-    //    covering the dot, ring AND label area
-    const hit = el('circle', {
-      class:'hit-area', cx:idx.x, cy:idx.y, r:hitR,
-      fill:'transparent',
+    // Dot body
+    const dot = se('circle', {
+      class:'c-dot', cx:cl.x, cy:cl.y, r:cfg.r, fill:col,
     });
 
+    // Label — offset below dot, centered
+    const lbl = se('text', {
+      class:'c-label', x:cl.x, y:cl.y + cfg.r + 9,
+      'text-anchor':'middle',
+    });
+    lbl.textContent = cl.label;
+
+    // Member count badge
+    if(cnt > 1){
+      const badge = se('text', {
+        class:'c-count', x:cl.x, y:cl.y + cfg.r + 16,
+        'text-anchor':'middle',
+      });
+      badge.textContent = cnt + ' indices';
+      g.appendChild(badge);
+    }
+
+    // Large invisible hit area — MUST be last child (topmost)
+    const hit = se('circle', {
+      class:'c-hit', cx:cl.x, cy:cl.y, r:cfg.hit,
+    });
+
+    g.appendChild(aura);
     g.appendChild(ring);
     g.appendChild(dot);
     g.appendChild(lbl);
-    g.appendChild(hit);  // ← last = topmost in SVG stacking
+    g.appendChild(hit);   // ← last = topmost in SVG stacking
 
-    // Events on the GROUP (hits the hit-area)
-    g.addEventListener('mouseenter', e => onHoverIn(e, idx, g));
-    g.addEventListener('mouseleave', e => onHoverOut(g));
-    g.addEventListener('click',      () => onDotClick(idx, g));
+    // Attach ALL interaction events to the group
+    // Touch events for mobile
+    g.addEventListener('touchstart', e => { e.preventDefault(); onDown(e, cl, g); }, {passive:false});
+    g.addEventListener('touchend',   e => { e.preventDefault(); onClick(cl, g); },  {passive:false});
+    // Mouse events for desktop
+    g.addEventListener('mouseenter', e => onHoverIn(e, cl, g));
+    g.addEventListener('mouseleave', ()=> onHoverOut(g));
+    g.addEventListener('click',      ()=> onClick(cl, g));
 
     layer.appendChild(g);
   });
 }
 
 // ═══════════════════════════════════════════════════════
-// HOVER
+// RIPPLE — touch/click feedback
 // ═══════════════════════════════════════════════════════
-const TT   = document.getElementById('tooltip');
-const TTN  = document.getElementById('tt-n');
-const TTM  = document.getElementById('tt-m');
-const TTS  = document.getElementById('tt-s');
-const TTH  = document.getElementById('tt-h');
+function ripple(cx, cy, color){
+  const rl = document.getElementById('ripple-layer');
+  const r = se('circle', {cx, cy, r:'6', stroke:color, fill:'none', class:'ripple'});
+  rl.appendChild(r);
+  r.addEventListener('animationend', ()=> r.remove());
+}
+
+function onDown(e, cl, g){
+  // immediate visual feedback on touchstart
+  const cfg = G[cl.group]||G.asia;
+  ripple(cl.x, cl.y, cfg.color);
+  g.classList.add('hover');
+}
+
+// ═══════════════════════════════════════════════════════
+// HOVER (desktop)
+// ═══════════════════════════════════════════════════════
+const TT   = document.getElementById('tt');
 const WRAP = document.getElementById('map-wrap');
 
-function onHoverIn(e, idx, g){
-  if(!g.classList.contains('selected')) g.classList.add('hover');
-
-  // position tooltip
-  const wr = WRAP.getBoundingClientRect();
-  let tx = e.clientX - wr.left + 14;
-  let ty = e.clientY - wr.top  - 10;
-  // keep in bounds
-  tx = Math.min(tx, wr.width - 240);
-  ty = Math.max(ty, 10);
-
-  TTN.textContent = idx.label;
-  TTM.textContent = idx.exchange + ' · ' + idx.city + ' · ' + idx.region;
-  TTS.textContent = 'Sectors: ' + idx.sectors.slice(0,5).join(', ') + (idx.sectors.length>5?'…':'');
-  TTH.textContent = S.sel.has(idx.id) ? '✓ Selected — click to deselect' : '↵ Click to select this market';
-
-  TT.style.left = tx+'px';
-  TT.style.top  = ty+'px';
+function onHoverIn(e, cl, g){
+  if(!g.classList.contains('sel')) g.classList.add('hover');
+  positionTooltip(e, cl);
   TT.classList.add('show');
 }
 function onHoverOut(g){
-  if(!g.classList.contains('selected')) g.classList.remove('hover');
   g.classList.remove('hover');
   TT.classList.remove('show');
 }
 
+function positionTooltip(e, cl){
+  const wr = WRAP.getBoundingClientRect();
+  let tx = e.clientX - wr.left + 16;
+  let ty = e.clientY - wr.top  - 8;
+  tx = Math.min(tx, wr.width - 256);
+  ty = Math.max(ty, 8);
+
+  document.getElementById('tt-n').textContent = cl.label;
+  document.getElementById('tt-e').textContent =
+    (cl.members||[]).map(m=>m.exchange).filter((v,i,a)=>a.indexOf(v)===i).join(' · ');
+
+  const ms = document.getElementById('tt-ms');
+  ms.innerHTML = (cl.members||[]).map(m=>
+    `<div class="tt-mem">${m.exchange} <span>${m.label}</span> — ${m.note||''}</div>`
+  ).join('');
+
+  document.getElementById('tt-s').textContent =
+    'Sectors: ' + cl.sectors.slice(0,6).join(', ') + (cl.sectors.length>6?'…':'');
+  document.getElementById('tt-h').textContent =
+    S.sel.has(cl.id) ? '✓ Selected — click to deselect' : '↵ Click / tap to select';
+
+  TT.style.left = tx + 'px';
+  TT.style.top  = ty + 'px';
+}
+
 // ═══════════════════════════════════════════════════════
-// DOT CLICK — the money function
+// CLICK / TAP
 // ═══════════════════════════════════════════════════════
-function onDotClick(idx, g){
-  if(S.sel.has(idx.id)){
-    S.sel.delete(idx.id);
-    g.classList.remove('selected','hover');
+function onClick(cl, g){
+  const cfg = G[cl.group]||G.asia;
+  ripple(cl.x, cl.y, cfg.color);
+
+  if(S.sel.has(cl.id)){
+    S.sel.delete(cl.id);
+    g.classList.remove('sel','hover');
   } else {
-    S.sel.add(idx.id);
+    S.sel.add(cl.id);
     g.classList.remove('hover');
-    g.classList.add('selected');
+    g.classList.add('sel');
   }
+
+  TT.classList.remove('show');
   refreshPanel();
   if(S.sel.size > 0) openPanel();
+  else closePanel();
   updateInstr();
-  TT.classList.remove('show');
 }
 
 // ═══════════════════════════════════════════════════════
 // PANEL
 // ═══════════════════════════════════════════════════════
-function openPanel(){
-  document.getElementById('panel').classList.add('open');
-}
-function closePanel(){
-  document.getElementById('panel').classList.remove('open');
-}
+function openPanel(){  document.getElementById('panel').classList.add('open');  }
+function closePanel(){ document.getElementById('panel').classList.remove('open'); }
+
+const clMap = Object.fromEntries(CLUSTERS.map(c=>[c.id,c]));
 
 function refreshPanel(){
   renderChips();
+  renderMembers();
   renderSectors();
   renderCommodities();
   updateCTA();
 }
 
-/* ── index chips ── */
 function renderChips(){
-  const idxMap = Object.fromEntries(INDICES.map(i=>[i.id,i]));
-  const el = document.getElementById('idx-chips');
-  if(!S.sel.size){
-    el.innerHTML = '<span style="font-family:var(--mono);font-size:9px;color:var(--t3)">No markets selected</span>';
-    document.getElementById('ph-cnt').textContent = '';
-    return;
-  }
-  document.getElementById('ph-cnt').textContent = ' — ' + S.sel.size + ' selected';
-  el.innerHTML = [...S.sel].map(id => {
-    const idx = idxMap[id]; if(!idx) return '';
-    const col = (GRP[idx.group]||GRP.asia).color;
-    return `<div class="idx-chip" onclick="removeIdx('${id}')">
-      <div class="icdot" style="background:${col}"></div>
-      <span>${idx.label}</span>
-      <span style="font-size:11px;opacity:.5;margin-left:1px">×</span>
+  const el = document.getElementById('chips');
+  document.getElementById('ph-cnt').textContent =
+    S.sel.size ? ' — '+S.sel.size+' selected' : '';
+  if(!S.sel.size){ el.innerHTML='<span style="font-family:var(--mono);font-size:9px;color:var(--t3)">Tap dots on the map</span>'; return; }
+  el.innerHTML = [...S.sel].map(id=>{
+    const cl = clMap[id]; if(!cl) return '';
+    const col = (G[cl.group]||G.asia).color;
+    return `<div class="chip" onclick="removeCluster('${id}')">
+      <div class="chip-dot" style="background:${col}"></div>
+      <span>${cl.label}</span>
+      <span style="font-size:12px;opacity:.5;margin-left:2px">×</span>
     </div>`;
   }).join('');
 }
 
-function removeIdx(id){
-  S.sel.delete(id);
-  const g = document.getElementById('dot-'+id);
-  if(g) g.classList.remove('selected','hover');
-  if(!S.sel.size) closePanel();
-  refreshPanel();
-  updateInstr();
+function renderMembers(){
+  const el = document.getElementById('members');
+  const all = [];
+  S.sel.forEach(id => {
+    const cl = clMap[id];
+    if(cl) (cl.members||[]).forEach(m => {
+      if(!all.find(x=>x.id===m.id)) all.push(m);
+    });
+  });
+  document.getElementById('mem-label').style.display = all.length ? '' : 'none';
+  el.innerHTML = all.map(m=>
+    `<div class="mem-tag">${m.exchange}: ${m.label}</div>`
+  ).join('');
 }
 
-/* ── sector tiles ── */
-function renderSectors(){
-  const idxMap  = Object.fromEntries(INDICES.map(i=>[i.id,i]));
-  const implied = new Set();
-  S.sel.forEach(id => (idxMap[id]?.sectors||[]).forEach(s=>implied.add(s)));
+function removeCluster(id){
+  S.sel.delete(id);
+  document.getElementById('cl-'+id)?.classList.remove('sel','hover');
+  if(!S.sel.size) closePanel();
+  refreshPanel(); updateInstr();
+}
 
-  const grid = document.getElementById('sector-grid');
-  grid.innerHTML = SECTORS.map(sec => {
-    const active  = implied.size===0 || implied.has(sec.id);
-    const on      = S.sectors.has(sec.id);
-    const dimCls  = active ? '' : 'dim';
-    return `<div class="sec-tile ${on?'on':''} ${dimCls}"
+function renderSectors(){
+  const implied = new Set();
+  S.sel.forEach(id => (clMap[id]?.sectors||[]).forEach(s=>implied.add(s)));
+  document.getElementById('sec-grid').innerHTML = SECTORS.map(sec=>{
+    const active = implied.size===0 || implied.has(sec.id);
+    const on = S.sectors.has(sec.id);
+    return `<div class="sec ${on?'on':''} ${active?'':'dim'}"
       style="color:${sec.color}"
       onclick="toggleSec('${sec.id}')">
-      <span>${sec.icon}</span>
-      <span>${sec.label}</span>
+      <span>${sec.icon}</span><span>${sec.label}</span>
     </div>`;
   }).join('');
 }
 
 function toggleSec(id){
   S.sectors.has(id) ? S.sectors.delete(id) : S.sectors.add(id);
-  renderSectors();
-  renderCommodities();
-  updateCTA();
+  renderSectors(); renderCommodities(); updateCTA();
 }
 
-/* ── commodity flags ── */
 function renderCommodities(){
-  const active = S.sectors.size > 0 ? S.sectors : new Set(SECTORS.map(s=>s.id));
-  document.getElementById('com-strip').innerHTML =
-    COMMODITY_FLAGS.map(cf => {
-      const lit = cf.sensitive_sectors.some(s=>active.has(s))
-               || cf.beneficiary_sectors.some(s=>active.has(s));
-      return `<div class="com-flag ${lit?'lit':''}" title="${cf.note}">
-        <span>${cf.icon}</span>
-        <span>${cf.commodity}</span>
-        ${lit ? `<span style="font-size:8px;margin-left:2px">${cf.direction.split('→')[0].trim()}</span>` : ''}
-      </div>`;
-    }).join('');
+  const active = S.sectors.size>0 ? S.sectors : new Set(SECTORS.map(s=>s.id));
+  document.getElementById('com-strip').innerHTML = COMMODITY_FLAGS.map(cf=>{
+    const lit = cf.sensitive_sectors.some(s=>active.has(s))||cf.beneficiary_sectors.some(s=>active.has(s));
+    return `<div class="com ${lit?'lit':''}" title="${cf.note}">
+      <span>${cf.icon}</span><span>${cf.commodity}</span>
+      ${lit?`<span style="font-size:8px;opacity:.7;margin-left:2px">${cf.direction.split('=')[0].trim()}</span>`:''}
+    </div>`;
+  }).join('');
 }
 
-/* ── CTA ── */
 function updateCTA(){
   const btn  = document.getElementById('btn-enter');
   const note = document.getElementById('cta-note');
   const summ = document.getElementById('cta-sel');
   const has  = S.sel.size > 0;
   btn.disabled = !has;
-  if(!has){
-    note.textContent = 'Select at least one market';
-    summ.textContent = '';
-  } else {
-    const sc = S.sectors.size;
-    note.textContent = sc > 0
-      ? sc + ' sector filter'+(sc>1?'s':'')+' applied'
-      : 'All sectors included';
-    const idxMap = Object.fromEntries(INDICES.map(i=>[i.id,i]));
-    summ.textContent = [...S.sel].map(id=>idxMap[id]?.label||id).join(' + ');
-  }
+  if(!has){ note.textContent='Select at least one region'; summ.textContent=''; return; }
+  const sc = S.sectors.size;
+  note.textContent = sc>0 ? sc+' sector filter'+(sc>1?'s':'')+' applied' : 'All sectors';
+  summ.textContent = [...S.sel].map(id=>clMap[id]?.label||id).join(' + ');
 }
 
-/* ── instruction bar ── */
 function updateInstr(){
   const msg = document.getElementById('instr-msg');
   const sel = document.getElementById('instr-sel');
   if(!S.sel.size){
-    msg.textContent = 'Click any index dot or commodity hub on the map to begin';
+    msg.textContent = 'Tap any region dot to build your market context';
     sel.textContent = '';
   } else {
-    msg.textContent = S.sel.size + ' market'+(S.sel.size>1?'s':'')+' selected · scroll panel to add sector filters';
-    sel.textContent = '';
+    msg.textContent = S.sel.size+' region'+(S.sel.size>1?'s':'')+' selected';
+    sel.textContent = '↓ scroll panel · tap OPEN DASHBOARD';
   }
 }
 
 // ═══════════════════════════════════════════════════════
-// ENTER → communicate to Streamlit parent
+// NAVIGATION  — THE FIX
+// Uses the official Streamlit Component protocol.
+// components.html() DOES support setComponentValue when
+// the correct message format is sent to window.parent.
+// Python receives the value on the next rerun.
 // ═══════════════════════════════════════════════════════
-function enterDashboard(){
+function go(){
   const payload = {
-    type: 'AVITO_CONTEXT',
     indices: [...S.sel],
     sectors: [...S.sectors],
+    members: [...S.sel].flatMap(id => (clMap[id]?.members||[]).map(m=>m.id)),
     ts: Date.now(),
   };
-  // Method 1: postMessage to parent
-  try{ window.parent.postMessage(JSON.stringify(payload), '*'); } catch(e){}
-  // Method 2: write to sessionStorage for same-origin reads
-  try{ sessionStorage.setItem('avito_context', JSON.stringify(payload)); } catch(e){}
-  // Method 3: URL query param navigation (most reliable in Streamlit iframes)
-  const url = new URL(window.parent.location.href);
-  url.searchParams.set('avito_ctx', encodeURIComponent(JSON.stringify(payload)));
-  try{ window.parent.location.href = url.toString(); } catch(e){
-    window.location.href = url.toString();
-  }
+
+  // ── METHOD A: Streamlit Component Value Protocol (primary) ──
+  // This is the official way for HTML components to communicate
+  // back to Python. Triggers a rerun with the value returned
+  // from components.html() call.
+  try {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: 'streamlit:setComponentValue',
+      value: payload,
+      dataType: 'json',
+    }, '*');
+  } catch(e){}
+
+  // ── METHOD B: also send plain postMessage (backup listener) ──
+  try {
+    window.parent.postMessage({
+      type: 'AVITO_CONTEXT',
+      ...payload,
+    }, '*');
+  } catch(e){}
 }
 
 // ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
-buildDots();
+buildClusters();
 renderCommodities();
 </script>
 </body>
