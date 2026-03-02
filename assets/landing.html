@@ -59,7 +59,7 @@ body::before{
 
 /* map topbar — thin header inside the 80% */
 #map-bar{
-  height:38px;flex-shrink:0;
+  height:46px;flex-shrink:0;
   background:rgba(8,13,20,.97);border-bottom:1px solid var(--bd);
   display:flex;align-items:center;padding:0 14px;gap:10px;
   font-family:var(--mono);font-size:9px;
@@ -74,7 +74,7 @@ body::before{
 }
 @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.12;box-shadow:none}}
 .mb-sep{width:1px;height:16px;background:var(--bd);flex-shrink:0}
-.mb-sub{color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-size:8px}
+.mb-sub{color:var(--t2);letter-spacing:.08em;text-transform:uppercase;font-size:9px;font-weight:500}
 .mb-sp{flex:1}
 .mb-pill{
   font-size:8px;padding:2px 8px;border-radius:2px;
@@ -90,11 +90,11 @@ body::before{
 
 /* ── SIDEBAR PANE — 20% ── */
 #sidebar{
-  flex:0 0 20%;
+  flex:0 0 clamp(200px, 20%, 340px);
+  width:clamp(200px, 20%, 340px);
   background:var(--s1);
   display:flex;flex-direction:column;
   overflow:hidden;
-  min-width:200px;max-width:340px;
 }
 
 /* ═══════════════════════════════════════════════════════ */
@@ -112,13 +112,18 @@ body::before{
 .corr-line{
   fill:none;pointer-events:none;
   stroke-linecap:round;
-  /* width encodes correlation strength via stroke-width attr */
 }
 .corr-line.flowing{
-  stroke-dasharray:8 6;
+  stroke-dasharray:10 7;
   animation:flow 12s linear infinite;
 }
-@keyframes flow{to{stroke-dashoffset:-140}}
+/* Highlight a corr line when its cluster is hovered */
+.corr-line.active{
+  stroke-width:4 !important;
+  opacity:0.95 !important;
+  animation-duration:6s !important;
+}
+@keyframes flow{from{stroke-dashoffset:280}to{stroke-dashoffset:0}}
 /* different speeds for different routes */
 .corr-line.speed-slow{animation-duration:20s}
 .corr-line.speed-med{animation-duration:14s}
@@ -177,10 +182,12 @@ body::before{
 /* CORRELATION LEGEND (inside map, top-left)              */
 /* ═══════════════════════════════════════════════════════ */
 #corr-legend{
-  position:absolute;top:8px;left:8px;z-index:200;pointer-events:all;
-  background:rgba(4,7,13,.94);border:1px solid var(--bd);border-radius:6px;
+  /* Now lives inside the sidebar — no longer an absolute overlay */
+  background:var(--s2);border:1px solid var(--bd);border-radius:5px;
   padding:9px 11px;font-family:var(--mono);
   transition:all .28s cubic-bezier(.16,1,.3,1);
+  margin:0 14px 0 14px;
+  flex-shrink:0;
 }
 #corr-legend.collapsed #leg-body{display:none}
 #corr-legend-hd{
@@ -196,7 +203,8 @@ body::before{
 }
 .leg-toggle:hover{border-color:var(--green);color:var(--green)}
 #leg-body{padding-top:8px}
-.leg-sec{margin-bottom:8px}
+.leg-sec{margin-bottom:6px}
+#sec-legend .sb-sec-body{ padding:8px 0 8px 0; }
 .leg-sec-ttl{font-size:6.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:5px}
 .leg-row{display:flex;align-items:center;gap:7px;margin-bottom:4px;font-size:8px;color:var(--t2)}
 .leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
@@ -356,10 +364,196 @@ body::before{
   opacity:0;transition:opacity .3s;white-space:nowrap;
 }
 #toast.show{opacity:1}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* RESPONSIVE — adaptive layout for all screen sizes          */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* ── TABLET: 768px–1100px — slim sidebar, map still dominant ── */
+@media (max-width:1100px){
+  #sidebar{
+    flex:0 0 clamp(180px, 22%, 280px);
+    width:clamp(180px, 22%, 280px);
+  }
+  .sb-sec-body{ padding:0 10px 10px; }
+  .sb-title{ font-size:9px; }
+  .corr-bar-lbl{ width:44px; font-size:7px; }
+  .mb-sub{ display:none; }
+  .com-card{ padding:6px 8px; }
+  #prompt-box{ display:none; }  /* hide prompt on tablet — save space */
+}
+
+/* ── SMALL TABLET / LARGE PHONE LANDSCAPE: stack sidebar below map ── */
+@media (max-width:820px){
+  #shell{
+    flex-direction:column;  /* stack: map on top, sidebar below */
+  }
+  #map-pane{
+    flex:0 0 62vh;           /* map gets 62% of viewport height */
+    border-right:none;
+    border-bottom:1px solid var(--bd);
+  }
+  #sidebar{
+    flex:1;
+    width:100%;
+    max-width:100%;
+    flex-direction:row;      /* sidebar items side-by-side */
+    overflow-x:auto;
+    overflow-y:hidden;
+  }
+  #sb-clock{ display:none; }
+  #sb-hd{ flex-shrink:0; min-width:140px; border-bottom:none; border-right:1px solid var(--bd); }
+  #sb-scroll{
+    flex:1;
+    overflow-x:auto;
+    overflow-y:hidden;
+    display:flex;
+    flex-direction:row;
+  }
+  .sb-section{
+    flex-shrink:0;
+    min-width:200px;
+    border-bottom:none;
+    border-right:1px solid var(--bd);
+  }
+  .sb-section .sb-sec-body{ display:block !important; padding:8px; }
+  .sb-sec-hd .caret{ display:none; }
+  #sb-cta{
+    flex-shrink:0;
+    min-width:180px;
+    border-top:none;
+    border-left:1px solid var(--bd);
+  }
+  /* legend now in sidebar — responsive handled by sidebar collapse */
+}
+
+/* ── MOBILE PORTRAIT: full-width map, slide-up sidebar panel ── */
+@media (max-width:560px){
+  #shell{
+    flex-direction:column;
+  }
+  #map-pane{
+    flex:1;
+    min-height:0;
+    border-bottom:none;
+  }
+  #sidebar{
+    flex:0 0 auto;
+    width:100%;
+    max-height:46vh;
+    flex-direction:column;
+    overflow-y:auto;
+    overflow-x:hidden;
+    border-top:2px solid var(--green);
+    box-shadow:0 -8px 32px rgba(0,0,0,.6);
+  }
+  #sidebar.mobile-collapsed{
+    max-height:48px;
+    overflow:hidden;
+  }
+  #sb-scroll{ display:block; overflow-y:auto; }
+  .sb-section{ border-right:none; border-bottom:1px solid var(--bd); min-width:unset; }
+  #map-bar .mb-sub{ display:none; }
+  /* mobile: show only selection + CTA sections by default */
+  #sec-sectors .sb-sec-body,
+  #sec-commodity .sb-sec-body,
+  #sec-corr .sb-sec-body { display:none; }
+  #sec-sectors.open .sb-sec-body,
+  #sec-commodity.open .sb-sec-body,
+  #sec-corr.open .sb-sec-body { display:block; }
+  /* Mobile sidebar toggle button */
+  #sb-mobile-toggle{
+    display:flex !important;
+    position:fixed;
+    bottom:14px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:800;
+    background:var(--green);
+    color:#020a05;
+    font-family:var(--mono);
+    font-size:10px;
+    font-weight:700;
+    padding:8px 18px;
+    border:none;
+    border-radius:20px;
+    cursor:pointer;
+    gap:6px;
+    box-shadow:0 4px 20px rgba(0,240,160,.4);
+  }
+}
+
+/* ── LARGE SCREENS: give sidebar a bit more room ── */
+@media (min-width:1440px){
+  #sidebar{ flex:0 0 clamp(260px, 18%, 380px); width:clamp(260px, 18%, 380px); }
+}
+@media (min-width:1920px){
+  #sidebar{ flex:0 0 clamp(280px, 16%, 400px); width:clamp(280px, 16%, 400px); }
+  html,body{ font-size:13px; }
+}
+
+/* ── Touch / tap improvements ── */
+@media (hover:none){
+  /* On touch devices, remove hover states that feel sticky */
+  .cluster.hover .c-ring{ opacity:0; }
+  .cluster.hover .c-label{ fill:rgba(194,214,236,.45); }
+  /* Larger tap targets */
+  .sb-sec-hd{ padding:12px 14px; }
+  .sec-tile{ padding:7px 10px; }
+  .sb-chip{ padding:5px 10px; }
+  #btn-enter{ min-height:50px; font-size:11px; }
+}
+/* ── Safari/iOS height fix ── */
+@supports (-webkit-touch-callout: none){
+  #shell{ height:-webkit-fill-available; }
+  #map-pane{ min-height:0; }
+}
+
+
+/* ── BOTTOM ALERT BAR ── */
+#alert-bar{
+  height:26px;flex-shrink:0;
+  background:rgba(6,9,12,.98);border-top:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 10px;gap:8px;
+  font-family:var(--mono);font-size:8px;color:var(--t3);
+  overflow:hidden;
+}
+.alert-tag{
+  flex-shrink:0;font-size:7px;padding:1px 7px;border-radius:2px;
+  border:1px solid rgba(255,184,48,.3);color:var(--amber);
+  text-transform:uppercase;letter-spacing:.08em;
+}
+.alert-ticker{
+  flex:1;overflow:hidden;white-space:nowrap;
+  display:flex;align-items:center;gap:0;
+}
+.alert-scroll{
+  display:inline-block;
+  animation:ticker 60s linear infinite;
+  white-space:nowrap;
+}
+@keyframes ticker{
+  0%{transform:translateX(0)}
+  100%{transform:translateX(-50%)}
+}
+.alert-item{
+  display:inline-block;padding:0 16px;color:var(--t2);
+  border-right:1px solid var(--bd);
+}
+.alert-item.up{color:var(--green)}
+.alert-item.dn{color:var(--red)}
+.alert-item.warn{color:var(--amber)}
+
 </style>
 </head>
 <body>
 <div id="shell">
+
+<!-- Mobile sidebar toggle — hidden on desktop via CSS -->
+<button id="sb-mobile-toggle" style="display:none" onclick="toggleMobileSidebar()">
+  <span id="sb-toggle-icon">▲</span>
+  <span id="sb-toggle-lbl">Context</span>
+</button>
 
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- MAP PANE  (80%)                                        -->
@@ -370,9 +564,12 @@ body::before{
   <div id="map-bar">
     <div class="mb-logo"><div class="mb-pulse"></div>AVITO</div>
     <div class="mb-sep"></div>
-    <div class="mb-sub">Global Financial Control</div>
+    <div>
+      <div class="mb-sub">Global Financial Control</div>
+      <div style="font-family:var(--mono);font-size:7px;color:var(--t3);letter-spacing:.05em;margin-top:1px">India Equity Market · Correlation Intelligence</div>
+    </div>
     <div class="mb-sp"></div>
-    <div class="mb-pill live" id="mb-status">● 77 Stocks</div>
+    <div class="mb-pill live" id="mb-status">● 77 Stocks Live</div>
     <div class="mb-pill time" id="mb-clk">--:-- IST</div>
   </div>
 
@@ -383,49 +580,6 @@ body::before{
     <div id="tt-ms"></div>
     <div class="tt-corr" id="tt-corr"></div>
     <div class="tt-hint" id="tt-h"></div>
-  </div>
-
-  <!-- CORRELATION LEGEND — collapsible, top-left of map -->
-  <div id="corr-legend" class="open">
-    <div id="corr-legend-hd" onclick="toggleLegend()">
-      <div class="leg-ttl">// Market Legend</div>
-      <div class="leg-toggle" id="leg-tog">▲</div>
-    </div>
-    <div id="leg-body">
-      <!-- Region dots -->
-      <div class="leg-sec">
-        <div class="leg-sec-ttl">// Equity Regions</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#3db8ff"></div>India (reference)</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#b580ff"></div>Asia-Pacific</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#00f0a0"></div>Europe</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#ffb830"></div>Americas</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#ff3d5a"></div>Mid East · Africa</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodities</div>
-      </div>
-      <!-- Correlation lines -->
-      <div class="leg-sec">
-        <div class="leg-sec-ttl">// Correlation Lines → Sensex</div>
-        <div class="leg-row">
-          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#3db8ff" stroke-width="2.5" stroke-dasharray="5 4"/></svg>
-          <div><div class="leg-corr-lbl">Equity (r &gt; 0.7)</div><div class="leg-corr-sub">thick line</div></div>
-        </div>
-        <div class="leg-row">
-          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#ffb830" stroke-width="1.5" stroke-dasharray="5 4"/></svg>
-          <div><div class="leg-corr-lbl">Crude Oil (inverse)</div><div class="leg-corr-sub">amber, thinner</div></div>
-        </div>
-        <div class="leg-row">
-          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#00f0a0" stroke-width="1" stroke-dasharray="5 4"/></svg>
-          <div><div class="leg-corr-lbl">Currency / FX</div><div class="leg-corr-sub">green, thin</div></div>
-        </div>
-        <div class="leg-row">
-          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#b580ff" stroke-width="1.8" stroke-dasharray="5 4"/></svg>
-          <div><div class="leg-corr-lbl">Metals / Commodities</div><div class="leg-corr-sub">purple</div></div>
-        </div>
-        <div class="leg-row" style="margin-top:4px;font-size:7px;color:var(--t3);line-height:1.4">
-          Line thickness = correlation strength<br>r = 0.9 → thickest · r = 0.4 → thinnest
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- toast instruction -->
@@ -497,6 +651,36 @@ body::before{
     </svg>
   </div><!-- /map-svg-wrap -->
 
+  <!-- BOTTOM ALERT BAR — configure later -->
+  <div id="alert-bar">
+    <div class="alert-tag">⚡ Alerts</div>
+    <div class="alert-ticker">
+      <span class="alert-scroll" id="alert-scroll">
+        <span class="alert-item up">NIFTY50 ▲ 22,847  +0.42%</span>
+        <span class="alert-item">SENSEX 75,631  +0.38%</span>
+        <span class="alert-item dn">BRENT CRUDE ▼ $81.20  -1.2%</span>
+        <span class="alert-item up">USD/INR 84.18  ▲ +0.15%</span>
+        <span class="alert-item warn">⚠ FII Outflow ₹4,200 Cr (3d)</span>
+        <span class="alert-item">GOLD $2,048  +0.3%</span>
+        <span class="alert-item dn">LME COPPER ▼ $8,920/t</span>
+        <span class="alert-item up">NIFTYIT ▲ +1.8%  TCS leads</span>
+        <span class="alert-item warn">⚠ RBI Policy 6 Apr — watch rates</span>
+        <span class="alert-item">NIFTYBANK +0.6%  HDFCBANK leads</span>
+        <!-- duplicate for seamless loop -->
+        <span class="alert-item up">NIFTY50 ▲ 22,847  +0.42%</span>
+        <span class="alert-item">SENSEX 75,631  +0.38%</span>
+        <span class="alert-item dn">BRENT CRUDE ▼ $81.20  -1.2%</span>
+        <span class="alert-item up">USD/INR 84.18  ▲ +0.15%</span>
+        <span class="alert-item warn">⚠ FII Outflow ₹4,200 Cr (3d)</span>
+        <span class="alert-item">GOLD $2,048  +0.3%</span>
+        <span class="alert-item dn">LME COPPER ▼ $8,920/t</span>
+        <span class="alert-item up">NIFTYIT ▲ +1.8%  TCS leads</span>
+        <span class="alert-item warn">⚠ RBI Policy 6 Apr — watch rates</span>
+        <span class="alert-item">NIFTYBANK +0.6%  HDFCBANK leads</span>
+      </span>
+    </div>
+  </div>
+
 </div><!-- /map-pane -->
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -513,10 +697,18 @@ body::before{
 
   <!-- header -->
   <div id="sb-hd">
-    <div class="sb-title">// MARKET CONTEXT</div>
-    <div class="sb-sub">
-      Global market correlation to<br>
-      <span style="color:var(--blue)">Sensex · Nifty 50</span> — Q1 FY26
+    <div style="display:flex;align-items:center;gap:8px">
+      <div>
+        <div class="sb-title">// MARKET CONTEXT</div>
+        <div class="sb-sub">
+          Global correlation to
+          <span style="color:var(--blue)">Sensex · Nifty 50</span>
+        </div>
+      </div>
+      <div style="margin-left:auto;font-family:var(--mono);font-size:7px;color:var(--t3);text-align:right;line-height:1.5">
+        Q1 FY26<br>
+        <span style="color:var(--green)">● Live</span>
+      </div>
     </div>
   </div>
 
@@ -575,6 +767,46 @@ body::before{
           90-day rolling correlation r. Line thickness on map encodes strength.
         </div>
         <div id="sb-corr-bars"></div>
+      </div>
+    </div>
+
+      <!-- ── Section 5: Market Legend (moved from map overlay) ── -->
+    <div class="sb-section open" id="sec-legend">
+      <div class="sb-sec-hd" onclick="toggleSection('sec-legend')">
+        <span>◈</span><span>Market Legend</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="sb-sec-body" style="padding-bottom:10px">
+        <!-- Region dots -->
+        <div style="font-size:6.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:6px">// Equity Regions</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#3db8ff"></div>India (reference)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#b580ff"></div>Asia-Pacific</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#00f0a0"></div>Europe</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ffb830"></div>Americas</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ff3d5a"></div>Mid East · Africa</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodities</div>
+        <!-- Correlation lines -->
+        <div style="font-size:6.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-top:8px;margin-bottom:6px">// Correlation Lines → Sensex</div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="28" y1="3" x2="0" y2="3" stroke="#3db8ff" stroke-width="2.5" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Equity (r&gt;0.7)</div><div class="leg-corr-sub">thick · inward flow</div></div>
+        </div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="28" y1="3" x2="0" y2="3" stroke="#ffb830" stroke-width="1.5" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Crude Oil (inverse)</div><div class="leg-corr-sub">amber · thinner</div></div>
+        </div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="28" y1="3" x2="0" y2="3" stroke="#00f0a0" stroke-width="1" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Currency / FX</div><div class="leg-corr-sub">green · thin</div></div>
+        </div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="28" y1="3" x2="0" y2="3" stroke="#b580ff" stroke-width="1.8" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Metals / Commodities</div><div class="leg-corr-sub">purple</div></div>
+        </div>
+        <div style="font-size:7px;color:var(--t3);line-height:1.4;margin-top:5px;padding-top:5px;border-top:1px solid var(--bd)">
+          Line thickness = correlation strength<br>r=0.9 → thickest · r=0.4 → thinnest<br>
+          <span style="color:var(--green)">→</span> Dashes flow inward toward India
+        </div>
       </div>
     </div>
 
@@ -687,11 +919,8 @@ setInterval(tick,1000); tick();
 // LEGEND TOGGLE
 // ═══════════════════════════════════════════════════════
 function toggleLegend(){
-  const el = document.getElementById('corr-legend');
-  const tog = document.getElementById('leg-tog');
-  const isOpen = !el.classList.contains('collapsed');
-  el.classList.toggle('collapsed', isOpen);
-  tog.textContent = isOpen ? '▼' : '▲';
+  // Legend is now a sidebar section — delegate to toggleSection
+  toggleSection('sec-legend');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -814,16 +1043,22 @@ const WRAP = document.getElementById('map-svg-wrap');
 
 function onHoverIn(e,cl,g){
   if(!g.classList.contains('sel')) g.classList.add('hover');
-  // highlight corr line
+  // Highlight this cluster's correlation line
   const line=document.getElementById('corr-'+cl.id);
-  if(line){ line.style.opacity='0.9'; line.style.strokeWidth=(parseFloat(line.getAttribute('stroke-width'))+1.5)+''; }
+  if(line){
+    line.classList.add('active');
+    line.style.filter='drop-shadow(0 0 3px '+line.getAttribute('stroke')+')';
+  }
   showTooltip(e,cl);
 }
 function onHoverOut(g){
   g.classList.remove('hover');
   TT.classList.remove('show');
-  // restore line
-  buildCorrLines(); // re-render at normal opacity
+  // Restore all corr lines to normal
+  document.querySelectorAll('.corr-line').forEach(l=>{
+    l.classList.remove('active');
+    l.style.filter='';
+  });
 }
 
 function showTooltip(e,cl){
@@ -1062,43 +1297,56 @@ function showToastMsg(msg){
 function hideToast(){document.getElementById('toast').classList.remove('show');}
 
 // ═══════════════════════════════════════════════════════
-// NAVIGATION — parent URL param technique
-// (works on Streamlit Community Cloud same-domain)
+// NAVIGATION — DEFINITIVE FIX (v5)
+//
+// KEY INSIGHT: Don't construct a URL path manually.
+// Streamlit Community Cloud uses non-obvious URL routing:
+// the page path varies by deployment slug, not just filename.
+//
+// SAFE APPROACH: Navigate the parent window to ITS CURRENT URL
+// (which is already the landing page URL since this iframe runs inside it)
+// + the ?_avito query param.
+//
+// This works because:
+// 1. window.parent.location.href = current page URL (landing page)
+// 2. Stripping existing params and adding ?_avito=...
+//    navigates the parent to the SAME PAGE with the new param
+// 3. Streamlit detects the URL change and reruns 00_Landing.py
+// 4. 00_Landing.py reads _avito → sets session_state → switch_page(context)
+// 5. No URL construction errors, works on ANY Streamlit deployment
 // ═══════════════════════════════════════════════════════
 function go(){
+  if(S.sel.size===0) return;
+
   const payload={
     indices:[...S.sel],
     sectors:[...S.sectors],
     members:[...S.sel].flatMap(id=>(clMap[id]?.members||[]).map(m=>m.id)),
     ts:Date.now(),
-    // Prompt context — tells dashboard how to filter
-    has_oil: S.sel.has('COM_OIL'),
+    has_oil:    S.sel.has('COM_OIL'),
     has_metals: S.sel.has('COM_METALS'),
-    has_agri: S.sel.has('COM_AGRI'),
+    has_agri:   S.sel.has('COM_AGRI'),
   };
 
-  // Method A: Streamlit setComponentValue (if declare_component used)
-  try{
-    window.parent.postMessage({
-      isStreamlitMessage:true,
-      type:'streamlit:setComponentValue',
-      value:payload,
-      dataType:'json',
-    },'*');
-  }catch(e){}
+  const json_str = JSON.stringify(payload);
 
-  // Method B: URL navigation (works with components.html + query_params)
   try{
-    const url=new URL(window.parent.location.href);
-    url.searchParams.set('_avito',encodeURIComponent(JSON.stringify(payload)));
-    window.parent.location.replace(url.toString());
-  }catch(e){
-    // same-frame fallback
+    // Get the parent window's current URL (this IS the landing page URL)
+    const parentHref = window.parent.location.href;
+    // Strip any existing query params to get a clean base
+    const baseUrl = parentHref.split('?')[0].split('#')[0];
+    // Add ?_avito=... to the same URL (landing page reruns with the param)
+    const targetUrl = baseUrl + '?_avito=' + encodeURIComponent(json_str);
+    // Navigate parent window — Streamlit WebSocket reconnects with new params
+    window.parent.location.href = targetUrl;
+  } catch(e){
+    // Cross-origin fallback: try the current frame's URL
     try{
-      const url=new URL(window.location.href);
-      url.searchParams.set('_avito',encodeURIComponent(JSON.stringify(payload)));
-      window.location.replace(url.toString());
-    }catch(e2){}
+      const baseUrl = window.location.href.split('?')[0].split('#')[0];
+      window.location.href = baseUrl + '?_avito=' + encodeURIComponent(json_str);
+    } catch(e2){
+      console.error('Navigation failed:', e, e2);
+    }
   }
 }
 
@@ -1113,6 +1361,48 @@ renderCorrBars();
 
 // show toast after 1.5s
 setTimeout(()=>showToastMsg('Click any dot to explore its correlation with Sensex'),1500);
+
+// ═══════════════════════════════════════════════════════
+// MOBILE SIDEBAR TOGGLE
+// ═══════════════════════════════════════════════════════
+function toggleMobileSidebar(){
+  const sb  = document.getElementById('sidebar');
+  const ico = document.getElementById('sb-toggle-icon');
+  const lbl = document.getElementById('sb-toggle-lbl');
+  const collapsed = sb.classList.toggle('mobile-collapsed');
+  ico.textContent = collapsed ? '▲' : '▼';
+  lbl.textContent = collapsed ? 'Context' : 'Close';
+}
+
+// ═══════════════════════════════════════════════════════
+// DYNAMIC HEIGHT — resize iframe to fit viewport
+// Sends a postMessage to Streamlit to adjust component height
+// (works with declare_component; ignored gracefully by components.html)
+// ═══════════════════════════════════════════════════════
+function reportHeight(){
+  const h = Math.max(document.documentElement.scrollHeight,
+                     window.innerHeight);
+  try{
+    window.parent.postMessage({
+      isStreamlitMessage:true,
+      type:'streamlit:setFrameHeight',
+      height: window.innerHeight,
+    }, '*');
+  } catch(e){}
+}
+window.addEventListener('resize', reportHeight);
+reportHeight();
+
+// ═══════════════════════════════════════════════════════
+// RESPONSIVE CORR LINE REBUILD on resize
+// ═══════════════════════════════════════════════════════
+let resizeTimer;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{
+    buildCorrLines();
+  }, 200);
+});
 </script>
 </body>
 </html>
