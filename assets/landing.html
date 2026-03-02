@@ -4,268 +4,441 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>AVITO · Global Markets</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
+/* ═══════════════════════════════════════════════════════ */
+/* DESIGN TOKENS                                          */
+/* ═══════════════════════════════════════════════════════ */
 :root{
-  --bg:#070a0d; --s1:#0b0f14; --s2:#0f1520; --s3:#141c28;
-  --bd:#1a2535; --bd2:#243044;
-  --green:#00e5a0; --amber:#f5a623; --blue:#38b6ff;
-  --red:#ff4757; --purple:#a78bfa;
-  --text:#b8cce0; --t2:#6a8aa8; --t3:#3d5570;
-  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+  --bg:#04070d; --s1:#080d14; --s2:#0d1520; --s3:#111d2a;
+  --bd:#162032; --bd2:#1e2e42;
+  --green:#00f0a0; --amber:#ffb830; --blue:#3db8ff;
+  --red:#ff3d5a; --purple:#b580ff; --pink:#f472b6;
+  --text:#c2d6ec; --t2:#6b8faa; --t3:#3a5268;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Space Grotesk',sans-serif;
+  /* CORRELATION COLORS — line thickness encodes strength */
+  --corr-equity:#3db8ff;
+  --corr-oil:#ffb830;
+  --corr-currency:#00f0a0;
+  --corr-metals:#b580ff;
 }
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
-body::after{content:'';position:fixed;inset:0;z-index:9000;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 4px)}
-body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:linear-gradient(rgba(26,37,53,.25) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(26,37,53,.25) 1px,transparent 1px);
-  background-size:44px 44px}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:12px;overflow:hidden}
 
-#shell{position:relative;height:100vh;display:flex;flex-direction:column;z-index:1;overflow:hidden}
+/* scanlines overlay */
+body::after{
+  content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 3px)
+}
+/* dot grid */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:radial-gradient(circle,rgba(30,46,66,.7) 1px,transparent 1px);
+  background-size:32px 32px
+}
 
-/* ── TOPBAR ── */
-#top{height:44px;flex-shrink:0;background:rgba(11,15,20,.98);border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;padding:0 16px;gap:12px}
-.t-pulse{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--green);
-  box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.15;box-shadow:none}}
-.t-name{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--green);letter-spacing:.1em}
-.t-sub{font-family:var(--mono);font-size:8px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase}
-.t-sep{width:1px;height:18px;background:var(--bd);flex-shrink:0}
-.t-sp{flex:1}
-.t-pill{font-family:var(--mono);font-size:8px;padding:3px 9px;border-radius:2px;
-  border:1px solid var(--bd2);color:var(--t3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
-.t-pill.on{border-color:rgba(0,229,160,.3);color:var(--green);background:rgba(0,229,160,.06)}
-.t-pill.a{border-color:rgba(245,166,35,.3);color:var(--amber)}
+/* ═══════════════════════════════════════════════════════ */
+/* LAYOUT — 80/20 vertical split                          */
+/* ═══════════════════════════════════════════════════════ */
+#shell{
+  position:relative;height:100vh;
+  display:flex;flex-direction:row;  /* HORIZONTAL: map | sidebar */
+  z-index:1;overflow:hidden;
+}
 
-/* ── MAIN ── */
-#main{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+/* ── MAP PANE — 80% ── */
+#map-pane{
+  flex:0 0 80%;
+  position:relative;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  border-right:1px solid var(--bd);
+}
 
-/* ── MAP ── */
-#map-wrap{flex:1;position:relative;min-height:0;touch-action:none}
+/* map topbar — thin header inside the 80% */
+#map-bar{
+  height:38px;flex-shrink:0;
+  background:rgba(8,13,20,.97);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 14px;gap:10px;
+  font-family:var(--mono);font-size:9px;
+}
+.mb-logo{
+  font-size:13px;font-weight:600;color:var(--green);letter-spacing:.12em;
+  display:flex;align-items:center;gap:7px;
+}
+.mb-pulse{
+  width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite;flex-shrink:0
+}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.12;box-shadow:none}}
+.mb-sep{width:1px;height:16px;background:var(--bd);flex-shrink:0}
+.mb-sub{color:var(--t3);letter-spacing:.08em;text-transform:uppercase;font-size:8px}
+.mb-sp{flex:1}
+.mb-pill{
+  font-size:8px;padding:2px 8px;border-radius:2px;
+  border:1px solid var(--bd2);color:var(--t3);letter-spacing:.06em;
+}
+.mb-pill.live{border-color:rgba(0,240,160,.3);color:var(--green);background:rgba(0,240,160,.05)}
+.mb-pill.time{border-color:rgba(255,184,48,.25);color:var(--amber)}
+
+#map-svg-wrap{
+  flex:1;position:relative;min-height:0;touch-action:none;overflow:hidden
+}
 #map-svg{width:100%;height:100%;display:block;pointer-events:all}
 
-/* All background SVG layers — zero interactivity */
+/* ── SIDEBAR PANE — 20% ── */
+#sidebar{
+  flex:0 0 20%;
+  background:var(--s1);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  min-width:200px;max-width:340px;
+}
+
+/* ═══════════════════════════════════════════════════════ */
+/* SVG LAYERS — all decorative layers pointer-events:none */
+/* ═══════════════════════════════════════════════════════ */
 .bg-layer{pointer-events:none}
-.continent{fill:rgba(18,26,38,.72);stroke:rgba(56,182,255,.09);stroke-width:.6;pointer-events:none}
-.graticule{stroke:rgba(26,37,53,.45);stroke-width:.4;fill:none;pointer-events:none}
-.equator{stroke:rgba(56,182,255,.1);stroke-width:.6;fill:none;stroke-dasharray:5 9;pointer-events:none}
-.flow-line{stroke-dasharray:6 5;stroke-width:.8;fill:none;pointer-events:none;
-  animation:dash 16s linear infinite}
-@keyframes dash{to{stroke-dashoffset:-66}}
+.continent{
+  fill:rgba(14,20,32,.8);stroke:rgba(61,184,255,.07);stroke-width:.5;
+  pointer-events:none
+}
+.graticule{stroke:rgba(22,32,50,.65);stroke-width:.35;fill:none;pointer-events:none}
+.equator{stroke:rgba(61,184,255,.09);stroke-width:.5;fill:none;stroke-dasharray:4 8;pointer-events:none}
+
+/* ── CORRELATION LINES (the new animated lines) ── */
+.corr-line{
+  fill:none;pointer-events:none;
+  stroke-linecap:round;
+  /* width encodes correlation strength via stroke-width attr */
+}
+.corr-line.flowing{
+  stroke-dasharray:8 6;
+  animation:flow 12s linear infinite;
+}
+@keyframes flow{to{stroke-dashoffset:-140}}
+/* different speeds for different routes */
+.corr-line.speed-slow{animation-duration:20s}
+.corr-line.speed-med{animation-duration:14s}
+.corr-line.speed-fast{animation-duration:9s}
 
 /* ── CLUSTER DOTS ── */
-/* Each cluster = <g class="cluster"> containing:
-   .c-aura   — large ambient glow (pointer-events:none)
-   .c-ring   — animated ring     (pointer-events:none)
-   .c-dot    — visible fill dot  (pointer-events:none)
-   .c-label  — text label        (pointer-events:none)
-   .c-hit    — LARGE invisible hit circle (pointer-events:all) ← only interactive element
-*/
 .cluster{cursor:pointer}
-.c-aura{pointer-events:none;transition:opacity .3s}
-.c-ring{pointer-events:none;fill:none;stroke-width:1;opacity:0;
-  transform-origin:center center;transition:opacity .25s;
-  animation:ring-spin 3s ease-in-out infinite}
-@keyframes ring-spin{0%,100%{opacity:.5}50%{opacity:1}}
-.c-dot{pointer-events:none;transition:r .2s}
-.c-label{pointer-events:none;font-family:var(--mono);font-size:7px;
-  fill:rgba(184,204,224,.5);letter-spacing:.03em;transition:fill .2s}
-.c-count{pointer-events:none;font-family:var(--mono);font-size:5.5px;
-  fill:rgba(184,204,224,.35);letter-spacing:.02em}
-/* large transparent hit circle — ALL pointer events go here */
+.c-aura{pointer-events:none;transition:opacity .35s}
+.c-ring{
+  pointer-events:none;fill:none;stroke-width:.8;opacity:0;
+  animation:ring-breathe 2.8s ease-in-out infinite;
+}
+@keyframes ring-breathe{0%,100%{opacity:.3;r:inherit}50%{opacity:.8}}
+.c-dot{pointer-events:none;transition:r .2s,opacity .2s}
+.c-label{
+  pointer-events:none;font-family:var(--mono);font-size:6.8px;
+  fill:rgba(194,214,236,.45);letter-spacing:.02em;
+}
+.c-sub{pointer-events:none;font-family:var(--mono);font-size:5px;fill:rgba(107,143,170,.4)}
 .c-hit{fill:transparent;pointer-events:all;cursor:pointer}
 
-/* hover/selected states toggled by JS adding class to <g> */
+/* hover / selected via JS class on <g> */
 .cluster.hover .c-ring,.cluster.sel .c-ring{opacity:1}
-.cluster.hover .c-label,.cluster.sel .c-label{fill:rgba(184,204,224,1)}
-.cluster.sel .c-dot{filter:brightness(1.6) drop-shadow(0 0 6px currentColor)}
+.cluster.hover .c-label,.cluster.sel .c-label{fill:rgba(194,214,236,1)}
+.cluster.sel .c-dot{filter:brightness(1.7) drop-shadow(0 0 7px currentColor)}
 .cluster.hover .c-dot{filter:brightness(1.3)}
-.cluster.sel .c-aura{opacity:.25}
-.cluster.hover .c-aura{opacity:.15}
+.cluster.sel .c-aura{opacity:.3}
 
-/* ── RIPPLE (touch feedback) ── */
-.ripple{pointer-events:none;fill:none;stroke-width:1.5;
-  animation:rip .5s ease-out forwards}
-@keyframes rip{
-  from{r:6;opacity:.9;stroke-width:2}
-  to{r:28;opacity:0;stroke-width:.5}
-}
+/* ripple */
+.ripple{pointer-events:none;fill:none;stroke-width:1.5;animation:rip .55s ease-out forwards}
+@keyframes rip{from{r:6;opacity:.95;stroke-width:2}to{r:30;opacity:0;stroke-width:.4}}
+
+/* ── INDIA DOT — special treatment, larger, pulsing ── */
+#cl-INDIA .c-dot{filter:drop-shadow(0 0 10px rgba(61,184,255,.8))}
+#cl-INDIA .c-ring{stroke-width:1.2;animation-duration:2s}
 
 /* ── TOOLTIP ── */
-#tt{position:absolute;z-index:600;pointer-events:none;
-  background:rgba(7,10,13,.97);border:1px solid var(--bd2);border-radius:8px;
-  padding:10px 13px;font-family:var(--mono);font-size:10px;color:var(--text);
-  box-shadow:0 12px 48px rgba(0,0,0,.65);opacity:0;transition:opacity .12s;
-  max-width:240px;min-width:160px}
+#tt{
+  position:absolute;z-index:700;pointer-events:none;
+  background:rgba(4,7,13,.98);border:1px solid var(--bd2);border-radius:7px;
+  padding:10px 12px;font-family:var(--mono);font-size:9.5px;color:var(--text);
+  box-shadow:0 14px 50px rgba(0,0,0,.7),0 0 0 1px rgba(61,184,255,.08);
+  opacity:0;transition:opacity .1s;max-width:220px;
+}
 #tt.show{opacity:1}
-.tt-name{font-size:12px;font-weight:600;color:var(--green);margin-bottom:4px}
-.tt-exch{font-size:8px;color:var(--t3);margin-bottom:6px;letter-spacing:.06em}
-.tt-members{display:flex;flex-direction:column;gap:3px;margin-bottom:6px}
-.tt-mem{font-size:9px;color:var(--t2)}
-.tt-mem span{color:var(--text)}
-.tt-secs{font-size:8px;color:var(--t3);border-top:1px solid var(--bd);padding-top:5px;margin-top:3px}
-.tt-hint{font-size:8px;color:var(--amber);margin-top:4px}
+.tt-name{font-size:11px;font-weight:600;color:var(--green);margin-bottom:3px;font-family:var(--sans)}
+.tt-exch{font-size:7.5px;color:var(--t3);margin-bottom:6px;letter-spacing:.07em;text-transform:uppercase}
+.tt-mem{font-size:8.5px;color:var(--t2);margin-bottom:2px}
+.tt-mem b{color:var(--text);font-weight:500}
+.tt-corr{margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);font-size:8px;color:var(--t3)}
+.tt-corr-row{display:flex;justify-content:space-between;margin-bottom:2px}
+.tt-corr-val{font-weight:600}
+.tt-hint{font-size:8px;color:var(--amber);margin-top:5px;padding-top:5px;border-top:1px solid var(--bd)}
 
-/* ── LEGEND ── */
-#legend{position:absolute;top:8px;right:10px;z-index:200;pointer-events:none;
-  background:rgba(7,10,13,.92);border:1px solid var(--bd);border-radius:6px;padding:10px 12px}
-.leg-ttl{font-family:var(--mono);font-size:7px;letter-spacing:.15em;
-  text-transform:uppercase;color:var(--t3);margin-bottom:7px}
-.leg-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;
-  font-family:var(--mono);font-size:8px;color:var(--t2)}
-.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.leg-dash{width:18px;height:0;border-top:1px dashed;flex-shrink:0;opacity:.5}
-
-/* ── INSTRUCTION BAR ── */
-#instr{
-  position:absolute;bottom:0;left:0;right:0;
-  background:rgba(7,10,13,.92);border-top:1px solid var(--bd);
-  padding:7px 16px;z-index:150;pointer-events:none;
-  display:flex;align-items:center;gap:8px;
-  font-family:var(--mono);font-size:9px;color:var(--t3)
+/* ═══════════════════════════════════════════════════════ */
+/* CORRELATION LEGEND (inside map, top-left)              */
+/* ═══════════════════════════════════════════════════════ */
+#corr-legend{
+  position:absolute;top:8px;left:8px;z-index:200;pointer-events:all;
+  background:rgba(4,7,13,.94);border:1px solid var(--bd);border-radius:6px;
+  padding:9px 11px;font-family:var(--mono);
+  transition:all .28s cubic-bezier(.16,1,.3,1);
 }
-#instr-dot{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0;
-  animation:pulse 2.5s ease-in-out infinite}
-#instr-sel{color:var(--green);margin-left:auto}
-
-/* ── SLIDE-UP PANEL ── */
-#panel{
-  position:absolute;bottom:0;left:0;right:0;
-  background:rgba(6,9,12,.99);border-top:1px solid var(--bd);
-  transform:translateY(100%);transition:transform .38s cubic-bezier(.16,1,.3,1);
-  z-index:400;max-height:66vh;display:flex;flex-direction:column;
+#corr-legend.collapsed #leg-body{display:none}
+#corr-legend-hd{
+  display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none
 }
-#panel.open{transform:translateY(0)}
-#panel-hd{
-  padding:11px 16px 9px;border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
+.leg-ttl{font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);flex:1}
+.leg-toggle{
+  width:16px;height:16px;border-radius:3px;
+  background:var(--s2);border:1px solid var(--bd2);
+  color:var(--t2);font-size:8px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  flex-shrink:0;transition:all .15s;
 }
-.ph-tag{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
-.ph-ttl{font-size:12px;color:var(--text)}
-.ph-cnt{font-family:var(--mono);font-size:9px;color:var(--green);margin-left:5px}
-#btn-close{margin-left:auto;width:26px;height:26px;border-radius:4px;
-  background:transparent;border:1px solid var(--bd2);color:var(--t2);cursor:pointer;
-  font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:all .15s;touch-action:manipulation}
-#btn-close:hover,#btn-close:active{border-color:var(--red);color:var(--red)}
+.leg-toggle:hover{border-color:var(--green);color:var(--green)}
+#leg-body{padding-top:8px}
+.leg-sec{margin-bottom:8px}
+.leg-sec-ttl{font-size:6.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:5px}
+.leg-row{display:flex;align-items:center;gap:7px;margin-bottom:4px;font-size:8px;color:var(--t2)}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.leg-line{height:0;flex-shrink:0;border-top-style:dashed}
+.leg-corr{
+  width:24px;height:3px;border-radius:2px;flex-shrink:0;opacity:.75;
+  position:relative;
+}
+.leg-corr-lbl{font-size:7.5px;color:var(--t2)}
+.leg-corr-sub{font-size:6.5px;color:var(--t3);margin-top:1px}
 
-#panel-body{flex:1;overflow-y:auto;padding:14px 16px;
-  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+/* ═══════════════════════════════════════════════════════ */
+/* SIDEBAR                                                */
+/* ═══════════════════════════════════════════════════════ */
+/* ── sidebar header ── */
+#sb-hd{
+  padding:14px 14px 10px;
+  border-bottom:1px solid var(--bd);flex-shrink:0;
+}
+.sb-title{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--green);
+  letter-spacing:.1em;margin-bottom:2px}
+.sb-sub{font-family:var(--mono);font-size:7.5px;color:var(--t3);letter-spacing:.05em;line-height:1.5}
 
-.pl{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--t3);margin-bottom:8px;margin-top:12px}
-.pl:first-child{margin-top:0}
+/* ── section accordion ── */
+.sb-section{border-bottom:1px solid var(--bd);flex-shrink:0}
+.sb-sec-hd{
+  display:flex;align-items:center;gap:8px;padding:9px 14px;
+  cursor:pointer;user-select:none;
+  font-family:var(--mono);font-size:8px;color:var(--t2);
+  letter-spacing:.1em;text-transform:uppercase;
+  transition:color .15s;
+}
+.sb-sec-hd:hover{color:var(--text)}
+.sb-sec-hd .caret{margin-left:auto;font-size:9px;transition:transform .2s;color:var(--t3)}
+.sb-section.open .sb-sec-hd .caret{transform:rotate(180deg)}
+.sb-section.open .sb-sec-hd{color:var(--text)}
+.sb-sec-body{
+  display:none;padding:0 14px 12px;
+  font-family:var(--mono);font-size:8px;
+}
+.sb-section.open .sb-sec-body{display:block}
 
-/* selected cluster chips */
-.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
-.chip{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:3px;
-  font-family:var(--mono);font-size:9px;border:1px solid rgba(56,182,255,.35);
-  background:rgba(56,182,255,.07);color:var(--blue);
-  cursor:pointer;transition:all .15s;touch-action:manipulation;user-select:none}
-.chip:hover,.chip:active{border-color:var(--red);color:var(--red)}
-.chip-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+/* ── selection chips ── */
+.sb-chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:0}
+.sb-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:2px;
+  font-size:8px;border:1px solid rgba(61,184,255,.3);
+  background:rgba(61,184,255,.07);color:var(--blue);
+  cursor:pointer;transition:all .12s;
+}
+.sb-chip:hover{border-color:var(--red);color:var(--red)}
+.sb-chip .cdot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.sb-empty{font-size:8px;color:var(--t3);font-style:italic}
 
-/* member sub-index list */
-.members-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
-.mem-tag{font-family:var(--mono);font-size:8px;padding:2px 7px;border-radius:2px;
-  background:var(--s2);border:1px solid var(--bd2);color:var(--t3)}
+/* ── commodity cards (the "news information section") ── */
+.com-card{
+  background:var(--s2);border:1px solid var(--bd);border-radius:5px;
+  padding:8px 10px;margin-bottom:7px;
+  transition:border-color .2s,background .2s;cursor:default;
+}
+.com-card.lit{border-color:rgba(255,184,48,.35);background:rgba(255,184,48,.06)}
+.com-card.lit .com-icon{filter:drop-shadow(0 0 4px rgba(255,184,48,.5))}
+.com-hd{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.com-icon{font-size:13px;flex-shrink:0}
+.com-name{font-size:9px;font-weight:600;color:var(--text)}
+.com-dir{font-size:7.5px;color:var(--t3);margin-top:1px;line-height:1.4}
+.com-stocks{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px}
+.com-stk{
+  font-size:7px;padding:1px 5px;border-radius:2px;
+  background:var(--s3);border:1px solid var(--bd2);color:var(--t3);
+}
+.com-card.lit .com-stk{color:var(--amber);border-color:rgba(255,184,48,.25)}
 
-/* sector tiles */
-.sec-grid{display:flex;flex-wrap:wrap;gap:6px}
-.sec{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:4px;
-  border:1px solid var(--bd2);background:var(--s2);
-  font-family:var(--mono);font-size:9px;color:var(--t2);
-  cursor:pointer;transition:all .18s;touch-action:manipulation;user-select:none}
-.sec:hover,.sec:active{transform:translateY(-1px)}
-.sec.on{border-color:currentColor;background:color-mix(in srgb,currentColor 10%,transparent)}
-.sec.dim{opacity:.25;pointer-events:none}
+/* ── sector grid ── */
+.sec-grid{display:flex;flex-wrap:wrap;gap:4px}
+.sec-tile{
+  display:flex;align-items:center;gap:4px;padding:4px 7px;
+  border-radius:3px;border:1px solid var(--bd2);background:var(--s2);
+  font-size:8px;color:var(--t2);cursor:pointer;
+  transition:all .16s;user-select:none;touch-action:manipulation;
+}
+.sec-tile:hover{transform:translateY(-1px)}
+.sec-tile.on{border-color:currentColor;background:color-mix(in srgb,currentColor 12%,transparent)}
+.sec-tile.dim{opacity:.2;pointer-events:none}
 
-/* commodity flags */
-.com-strip{display:flex;flex-wrap:wrap;gap:6px}
-.com{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:3px;
-  font-family:var(--mono);font-size:8px;border:1px solid var(--bd);
-  background:var(--s2);color:var(--t3);cursor:default}
-.com.lit{border-color:rgba(245,166,35,.4);color:var(--amber);background:rgba(245,166,35,.06)}
+/* ── correlation summary ── */
+.corr-summary{font-size:8px;color:var(--t2);line-height:1.7}
+.corr-bar-row{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.corr-bar-lbl{width:55px;flex-shrink:0;color:var(--t3);font-size:7.5px}
+.corr-bar-track{flex:1;height:3px;background:var(--bd2);border-radius:2px;overflow:hidden}
+.corr-bar-fill{height:100%;border-radius:2px;transition:width .7s cubic-bezier(.22,1,.36,1)}
+.corr-val{font-size:7.5px;width:30px;text-align:right;flex-shrink:0}
 
-/* ── CTA ── */
-#panel-cta{
-  padding:10px 16px;border-top:1px solid var(--bd);
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
+/* ── scroll area for commodity section ── */
+#sb-scroll{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;
+}
+#sb-scroll::-webkit-scrollbar{width:3px}
+#sb-scroll::-webkit-scrollbar-thumb{background:var(--bd2)}
+
+/* ── CTA AREA ── */
+#sb-cta{
+  flex-shrink:0;padding:14px;
+  border-top:1px solid var(--bd);
+  background:var(--s1);
 }
 #btn-enter{
-  padding:10px 24px;background:var(--green);border:none;color:#000;
+  width:100%;padding:11px;
+  background:var(--green);border:none;color:#020a05;
   border-radius:5px;font-family:var(--mono);font-size:10px;font-weight:700;
   letter-spacing:.1em;cursor:pointer;touch-action:manipulation;
-  transition:opacity .2s,transform .15s;
-  /* minimum 44px touch target height */
-  min-height:44px;
+  transition:opacity .2s,transform .12s;
+  min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;
 }
 #btn-enter:hover,#btn-enter:active{opacity:.85;transform:scale(.98)}
-#btn-enter:disabled{opacity:.22;cursor:not-allowed;transform:none;background:var(--t3)}
-.cta-note{font-family:var(--mono);font-size:9px;color:var(--t3);flex:1}
-#cta-sel{font-family:var(--mono);font-size:9px;color:var(--green);text-align:right}
+#btn-enter:disabled{
+  opacity:.18;cursor:not-allowed;transform:none;
+  background:var(--t3);color:var(--t2);
+}
+.btn-arrow{font-size:13px;transition:transform .18s}
+#btn-enter:hover .btn-arrow{transform:translateX(3px)}
+.cta-sub{
+  margin-top:7px;font-family:var(--mono);font-size:8px;
+  color:var(--t3);text-align:center;line-height:1.5;
+}
+.cta-sub span{color:var(--green)}
 
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--bd2)}
+/* ── default dashboard prompt  ── */
+#prompt-box{
+  background:var(--s2);border:1px solid var(--bd);border-radius:5px;
+  padding:8px 10px;margin-top:8px;font-family:var(--mono);font-size:8px;
+}
+.pmt-ttl{color:var(--amber);font-size:7.5px;letter-spacing:.08em;
+  text-transform:uppercase;margin-bottom:4px}
+.pmt-body{color:var(--t2);line-height:1.5}
+.pmt-body b{color:var(--text)}
+.pmt-row{display:flex;align-items:flex-start;gap:4px;margin-bottom:3px}
+.pmt-dot{width:4px;height:4px;border-radius:50%;background:var(--green);
+  flex-shrink:0;margin-top:4px}
+
+/* ── IST clock in sidebar ── */
+#sb-clock{
+  padding:7px 14px 0;
+  font-family:var(--mono);font-size:8px;color:var(--t3);
+  display:flex;gap:8px;flex-shrink:0;
+}
+#sb-clk{color:var(--amber)}
+
+/* ── instruction toast ── */
+#toast{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  background:rgba(4,7,13,.96);border:1px solid var(--bd2);border-radius:20px;
+  padding:5px 14px;font-family:var(--mono);font-size:8px;color:var(--t2);
+  pointer-events:none;z-index:300;
+  opacity:0;transition:opacity .3s;white-space:nowrap;
+}
+#toast.show{opacity:1}
 </style>
 </head>
 <body>
 <div id="shell">
 
-<!-- TOPBAR -->
-<div id="top">
-  <div class="t-pulse"></div>
-  <div>
-    <div class="t-name">AVITO</div>
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- MAP PANE  (80%)                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="map-pane">
+
+  <!-- map topbar -->
+  <div id="map-bar">
+    <div class="mb-logo"><div class="mb-pulse"></div>AVITO</div>
+    <div class="mb-sep"></div>
+    <div class="mb-sub">Global Financial Control</div>
+    <div class="mb-sp"></div>
+    <div class="mb-pill live" id="mb-status">● 77 Stocks</div>
+    <div class="mb-pill time" id="mb-clk">--:-- IST</div>
   </div>
-  <div class="t-sep"></div>
-  <div class="t-sub">Global Market Intelligence</div>
-  <div class="t-sp"></div>
-  <div class="t-pill on">● 77 stocks · Live</div>
-  <div class="t-pill a" id="t-clk">--:-- IST</div>
-</div>
 
-<!-- MAIN -->
-<div id="main">
-
-  <!-- Tooltip -->
+  <!-- tooltip -->
   <div id="tt">
     <div class="tt-name" id="tt-n"></div>
     <div class="tt-exch" id="tt-e"></div>
-    <div class="tt-members" id="tt-ms"></div>
-    <div class="tt-secs" id="tt-s"></div>
+    <div id="tt-ms"></div>
+    <div class="tt-corr" id="tt-corr"></div>
     <div class="tt-hint" id="tt-h"></div>
   </div>
 
-  <!-- Legend -->
-  <div id="legend">
-    <div class="leg-ttl">// Market Regions</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#38b6ff"></div>India</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#a78bfa"></div>Asia-Pacific</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#00e5a0"></div>Europe</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#f5a623"></div>Americas</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#ff4757"></div>Mid East · Africa</div>
-    <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodities</div>
-    <div class="leg-row"><div class="leg-dash" style="border-color:#f5a623"></div>Trade flow</div>
+  <!-- CORRELATION LEGEND — collapsible, top-left of map -->
+  <div id="corr-legend" class="open">
+    <div id="corr-legend-hd" onclick="toggleLegend()">
+      <div class="leg-ttl">// Market Legend</div>
+      <div class="leg-toggle" id="leg-tog">▲</div>
+    </div>
+    <div id="leg-body">
+      <!-- Region dots -->
+      <div class="leg-sec">
+        <div class="leg-sec-ttl">// Equity Regions</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#3db8ff"></div>India (reference)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#b580ff"></div>Asia-Pacific</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#00f0a0"></div>Europe</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ffb830"></div>Americas</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ff3d5a"></div>Mid East · Africa</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#f472b6"></div>Commodities</div>
+      </div>
+      <!-- Correlation lines -->
+      <div class="leg-sec">
+        <div class="leg-sec-ttl">// Correlation Lines → Sensex</div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#3db8ff" stroke-width="2.5" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Equity (r &gt; 0.7)</div><div class="leg-corr-sub">thick line</div></div>
+        </div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#ffb830" stroke-width="1.5" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Crude Oil (inverse)</div><div class="leg-corr-sub">amber, thinner</div></div>
+        </div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#00f0a0" stroke-width="1" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Currency / FX</div><div class="leg-corr-sub">green, thin</div></div>
+        </div>
+        <div class="leg-row">
+          <svg width="28" height="6" style="flex-shrink:0"><line x1="0" y1="3" x2="28" y2="3" stroke="#b580ff" stroke-width="1.8" stroke-dasharray="5 4"/></svg>
+          <div><div class="leg-corr-lbl">Metals / Commodities</div><div class="leg-corr-sub">purple</div></div>
+        </div>
+        <div class="leg-row" style="margin-top:4px;font-size:7px;color:var(--t3);line-height:1.4">
+          Line thickness = correlation strength<br>r = 0.9 → thickest · r = 0.4 → thinnest
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Instruction bar -->
-  <div id="instr">
-    <div id="instr-dot"></div>
-    <span id="instr-msg">Tap any region dot to build your market context</span>
-    <span id="instr-sel"></span>
-  </div>
+  <!-- toast instruction -->
+  <div id="toast">Click a dot to explore its impact on Sensex</div>
 
   <!-- SVG MAP -->
-  <div id="map-wrap">
+  <div id="map-svg-wrap">
     <svg id="map-svg" viewBox="0 0 1000 510" preserveAspectRatio="xMidYMid meet">
 
       <!-- Ocean -->
-      <rect width="1000" height="510" fill="#03050a" pointer-events="none"/>
+      <rect width="1000" height="510" fill="#020408" pointer-events="none"/>
 
-      <!-- Graticule + equator — NO pointer events -->
+      <!-- graticule -->
       <g class="bg-layer">
         <g class="graticule">
           <line x1="0" y1="85"  x2="1000" y2="85"/>
@@ -273,17 +446,22 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
           <line x1="0" y1="255" x2="1000" y2="255"/>
           <line x1="0" y1="340" x2="1000" y2="340"/>
           <line x1="0" y1="425" x2="1000" y2="425"/>
-          <line x1="83"  y1="0" x2="83"  y2="510"/><line x1="167" y1="0" x2="167" y2="510"/>
-          <line x1="250" y1="0" x2="250" y2="510"/><line x1="333" y1="0" x2="333" y2="510"/>
-          <line x1="417" y1="0" x2="417" y2="510"/><line x1="500" y1="0" x2="500" y2="510"/>
-          <line x1="583" y1="0" x2="583" y2="510"/><line x1="667" y1="0" x2="667" y2="510"/>
-          <line x1="750" y1="0" x2="750" y2="510"/><line x1="833" y1="0" x2="833" y2="510"/>
+          <line x1="83"  y1="0" x2="83"  y2="510"/>
+          <line x1="167" y1="0" x2="167" y2="510"/>
+          <line x1="250" y1="0" x2="250" y2="510"/>
+          <line x1="333" y1="0" x2="333" y2="510"/>
+          <line x1="417" y1="0" x2="417" y2="510"/>
+          <line x1="500" y1="0" x2="500" y2="510"/>
+          <line x1="583" y1="0" x2="583" y2="510"/>
+          <line x1="667" y1="0" x2="667" y2="510"/>
+          <line x1="750" y1="0" x2="750" y2="510"/>
+          <line x1="833" y1="0" x2="833" y2="510"/>
           <line x1="917" y1="0" x2="917" y2="510"/>
         </g>
         <line class="equator" x1="0" y1="255" x2="1000" y2="255"/>
       </g>
 
-      <!-- Continents — pointer-events:none on whole group -->
+      <!-- continents — NO pointer events -->
       <g class="bg-layer">
         <polygon class="continent" points="95,78 172,68 232,72 268,83 292,95 308,112 312,136 290,155 278,170 263,185 250,200 238,218 222,228 205,242 196,258 183,272 170,284 158,278 146,262 134,248 122,238 110,222 100,202 92,182 85,162 81,142 80,120 83,100 88,88"/>
         <polygon class="continent" points="188,43 240,36 282,40 302,54 292,70 268,76 238,73 208,65 190,56"/>
@@ -303,99 +481,275 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
         <polygon class="continent" points="788,328 820,316 852,313 880,318 902,330 914,346 912,363 900,378 880,388 856,393 830,390 806,380 788,366 778,350 780,336"/>
       </g>
 
-      <!-- Commodity flow lines — pointer-events:none -->
-      <g class="bg-layer">
-        <line class="flow-line" x1="430" y1="136" x2="649" y2="254" stroke="#f5a623" opacity=".3"/>
-        <line class="flow-line" x1="565" y1="253" x2="649" y2="254" stroke="#f5a623" opacity=".4" style="animation-delay:-4s"/>
-        <line class="flow-line" x1="213" y1="192" x2="649" y2="254" stroke="#f5a623" opacity=".18" style="animation-delay:-8s"/>
-        <line class="flow-line" x1="424" y1="155" x2="649" y2="254" stroke="#94a3b8" opacity=".25" style="animation-delay:-2s"/>
-        <line class="flow-line" x1="791" y1="235" x2="649" y2="254" stroke="#94a3b8" opacity=".2"  style="animation-delay:-6s"/>
-        <line class="flow-line" x1="773" y1="289" x2="649" y2="254" stroke="#00e5a0" opacity=".18" style="animation-delay:-10s"/>
-        <line class="flow-line" x1="213" y1="192" x2="433" y2="148" stroke="#38b6ff" opacity=".1"  style="animation-delay:-3s"/>
-      </g>
+      <!-- ═══════════════════════════════════════════════ -->
+      <!-- CORRELATION LINES — built by JS                -->
+      <!-- Thickness = correlation strength               -->
+      <!-- All converge on INDIA dot (649, 254)           -->
+      <!-- ═══════════════════════════════════════════════ -->
+      <g id="corr-layer" style="pointer-events:none"></g>
 
-      <!-- ═══ CLUSTER DOTS — built by JS, always rendered last (on top) ═══ -->
+      <!-- ═══════════════════════════════════════════════ -->
+      <!-- CLUSTER DOTS — built by JS, always on top      -->
+      <!-- ═══════════════════════════════════════════════ -->
       <g id="clusters-layer"></g>
-
-      <!-- Ripple effects layer -->
       <g id="ripple-layer" pointer-events="none"></g>
 
     </svg>
+  </div><!-- /map-svg-wrap -->
+
+</div><!-- /map-pane -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- SIDEBAR  (20%)                                         -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="sidebar">
+
+  <!-- clock header -->
+  <div id="sb-clock">
+    <span>IST</span>
+    <span id="sb-clk" style="color:var(--amber)">--:--:--</span>
+    <span style="margin-left:auto;color:var(--t3)">NSE · BSE</span>
   </div>
 
-  <!-- SLIDE-UP PANEL -->
-  <div id="panel">
-    <div id="panel-hd">
-      <div>
-        <div class="ph-tag">// Market Context Builder</div>
-        <div class="ph-ttl">Select regions<span class="ph-cnt" id="ph-cnt"></span></div>
+  <!-- header -->
+  <div id="sb-hd">
+    <div class="sb-title">// MARKET CONTEXT</div>
+    <div class="sb-sub">
+      Global market correlation to<br>
+      <span style="color:var(--blue)">Sensex · Nifty 50</span> — Q1 FY26
+    </div>
+  </div>
+
+  <!-- ACCORDION SECTIONS — scrollable middle -->
+  <div id="sb-scroll">
+
+    <!-- ── Section 1: Selection ── -->
+    <div class="sb-section open" id="sec-selection">
+      <div class="sb-sec-hd" onclick="toggleSection('sec-selection')">
+        <span>◎</span><span>Active Selection</span>
+        <span class="caret">▾</span>
       </div>
-      <button id="btn-close" onclick="closePanel()">✕</button>
+      <div class="sb-sec-body">
+        <div class="sb-chips" id="sb-chips">
+          <span class="sb-empty">Tap dots on the map to begin</span>
+        </div>
+      </div>
     </div>
-    <div id="panel-body">
-      <div class="pl">// Active selections — tap to remove</div>
-      <div class="chips" id="chips"></div>
-      <div class="pl" id="mem-label">// Indices included</div>
-      <div class="members-grid" id="members"></div>
-      <div class="pl">// Sector filter — tap to narrow (default = all)</div>
-      <div class="sec-grid" id="sec-grid"></div>
-      <div class="pl">// Commodity sensitivity</div>
-      <div class="com-strip" id="com-strip"></div>
+
+    <!-- ── Section 2: Sector Filter ── -->
+    <div class="sb-section open" id="sec-sectors">
+      <div class="sb-sec-hd" onclick="toggleSection('sec-sectors')">
+        <span>▤</span><span>Sector Filter</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="sb-sec-body">
+        <div style="font-size:7.5px;color:var(--t3);margin-bottom:7px;line-height:1.4">
+          Tap to filter Nifty50 stocks in the dashboard.<br>Leave blank for all sectors.
+        </div>
+        <div class="sec-grid" id="sb-sec-grid"></div>
+      </div>
     </div>
-    <div id="panel-cta">
-      <button id="btn-enter" disabled onclick="go()">OPEN DASHBOARD →</button>
-      <span class="cta-note" id="cta-note">Select at least one region</span>
-      <span id="cta-sel"></span>
+
+    <!-- ── Section 3: Commodity Sensitivity ── -->
+    <div class="sb-section open" id="sec-commodity">
+      <div class="sb-sec-hd" onclick="toggleSection('sec-commodity')">
+        <span>🛢</span><span>Commodity Sensitivity</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="sb-sec-body">
+        <div style="font-size:7.5px;color:var(--t3);margin-bottom:8px;line-height:1.4">
+          Cards light up when your selection has exposure to these commodities.
+        </div>
+        <div id="sb-com-list"></div>
+      </div>
+    </div>
+
+    <!-- ── Section 4: Correlation Summary ── -->
+    <div class="sb-section open" id="sec-corr">
+      <div class="sb-sec-hd" onclick="toggleSection('sec-corr')">
+        <span>≈</span><span>Correlation vs Sensex</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="sb-sec-body">
+        <div style="font-size:7.5px;color:var(--t3);margin-bottom:8px;line-height:1.4">
+          90-day rolling correlation r. Line thickness on map encodes strength.
+        </div>
+        <div id="sb-corr-bars"></div>
+      </div>
+    </div>
+
+  </div><!-- /sb-scroll -->
+
+  <!-- CTA AREA — fixed at bottom of sidebar -->
+  <div id="sb-cta">
+
+    <!-- prompt box — explains what will open -->
+    <div id="prompt-box">
+      <div class="pmt-ttl">// Dashboard Opens With</div>
+      <div class="pmt-body" id="prompt-body">
+        <div class="pmt-row">
+          <div class="pmt-dot"></div>
+          <span>Default: <b>Nifty 50</b> all sectors</span>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-enter" onclick="go()" disabled style="margin-top:10px">
+      <span>OPEN DASHBOARD</span>
+      <span class="btn-arrow">→</span>
+    </button>
+    <div class="cta-sub" id="cta-sub">
+      Select a market region or commodity above
     </div>
   </div>
 
-</div><!-- /main -->
+</div><!-- /sidebar -->
+
 </div><!-- /shell -->
 
 <script>
 // ═══════════════════════════════════════════════════════
-// DATA  (injected by Streamlit renderer)
+// DATA  — injected by Python
 // ═══════════════════════════════════════════════════════
-const CLUSTERS        = __INDICES__;        // uses get_indices() which returns cluster records
+const CLUSTERS        = __INDICES__;
 const SECTORS         = __SECTORS__;
 const COMMODITY_FLAGS = __COMMODITY_FLAGS__;
 
 // ═══════════════════════════════════════════════════════
-// GROUP CONFIG
+// CORRELATION DATA
+// Each cluster → correlation with Sensex (r value 0-1)
+// Type: equity | oil | currency | metals
+// Negative r shown as inverse (amber/thinner line)
 // ═══════════════════════════════════════════════════════
-const G = {
-  india:     {color:'#38b6ff', r:8,  ring:16, hit:24},
-  asia:      {color:'#a78bfa', r:6,  ring:12, hit:20},
-  europe:    {color:'#00e5a0', r:6,  ring:12, hit:20},
-  americas:  {color:'#f5a623', r:6,  ring:12, hit:20},
-  mideast:   {color:'#ff4757', r:5.5,ring:11, hit:18},
-  africa:    {color:'#ff4757', r:5,  ring:10, hit:16},
-  commodity: {color:'#f472b6', r:5,  ring:10, hit:18},
+const CORR = {
+  // Equity markets — positive, strong
+  US:       { r:0.72, type:'equity',   label:'S&P / Nasdaq / DJIA',  note:'FII sentiment leader' },
+  EUROPE:   { r:0.65, type:'equity',   label:'DAX / CAC / EuroStoxx', note:'Export demand signal' },
+  LONDON:   { r:0.61, type:'equity',   label:'FTSE 100/250',         note:'UK financials proxy' },
+  CHINA_HK: { r:0.58, type:'equity',   label:'Hang Seng / SSE',      note:'EM risk appetite' },
+  JAPAN:    { r:0.55, type:'equity',   label:'Nikkei / TOPIX',       note:'Asian risk-on proxy' },
+  KOREA:    { r:0.51, type:'equity',   label:'KOSPI / KOSDAQ',       note:'Tech cycle indicator' },
+  SEA:      { r:0.44, type:'equity',   label:'SGX / SET / IDX',      note:'Regional EM basket' },
+  AUSTRALIA:{ r:0.48, type:'equity',   label:'ASX 200',              note:'Commodities + banking' },
+  BRAZIL:   { r:0.39, type:'equity',   label:'Bovespa',              note:'Emerging market beta' },
+  CANADA:   { r:0.42, type:'equity',   label:'TSX Composite',        note:'Energy + metals proxy' },
+  MIDEAST:  { r:0.34, type:'equity',   label:'Tadawul / DFM',        note:'Oil revenue recycling' },
+  AFRICA:   { r:0.31, type:'equity',   label:'JSE / EGX30',         note:'Commodity EM exposure' },
+  // Commodities — complex correlations
+  COM_OIL:  { r:0.62, type:'oil',      label:'Brent / WTI / Dubai',  note:'↑ oil = ↑ input costs, risk-off for importers', inverse:true },
+  COM_METALS:{ r:0.56, type:'metals',  label:'LME Cu/Al + Gold + Coal', note:'↑ metals = industrial growth signal' },
+  COM_AGRI: { r:0.41, type:'currency', label:'Palm Oil + BDI + USD/INR', note:'Rupee/freight drive input costs' },
+};
+
+// ── INDIA reference point ──
+const INDIA_X = 649, INDIA_Y = 254;
+
+// ── correlation type → visual mapping ──
+const CORR_STYLE = {
+  equity:   { color:'#3db8ff', baseWidth:1.0, maxWidth:4.0 },
+  oil:      { color:'#ffb830', baseWidth:0.8, maxWidth:2.8 },
+  currency: { color:'#00f0a0', baseWidth:0.6, maxWidth:2.0 },
+  metals:   { color:'#b580ff', baseWidth:0.8, maxWidth:3.0 },
 };
 
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-const S = { sel: new Set(), sectors: new Set() };
+const S = {
+  sel:     new Set(),   // selected cluster IDs
+  sectors: new Set(),   // selected sector IDs
+};
+const clMap = Object.fromEntries(CLUSTERS.map(c=>[c.id,c]));
+
+const GRP = {
+  india:     {color:'#3db8ff', r:9,  ring:18, hit:26},
+  asia:      {color:'#b580ff', r:6,  ring:13, hit:20},
+  europe:    {color:'#00f0a0', r:6,  ring:13, hit:20},
+  americas:  {color:'#ffb830', r:6,  ring:13, hit:20},
+  mideast:   {color:'#ff3d5a', r:5.5,ring:11, hit:18},
+  africa:    {color:'#ff3d5a', r:5,  ring:10, hit:17},
+  commodity: {color:'#f472b6', r:5.5,ring:11, hit:19},
+};
 
 // ═══════════════════════════════════════════════════════
 // CLOCK
 // ═══════════════════════════════════════════════════════
-const clk = document.getElementById('t-clk');
 function tick(){
-  clk.textContent = new Date().toLocaleString('en-IN',
-    {timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) + ' IST';
+  const t = new Date().toLocaleString('en-IN',{
+    timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+  });
+  document.getElementById('mb-clk').textContent = t+' IST';
+  document.getElementById('sb-clk').textContent = t;
 }
 setInterval(tick,1000); tick();
 
 // ═══════════════════════════════════════════════════════
-// SVG HELPERS
+// LEGEND TOGGLE
+// ═══════════════════════════════════════════════════════
+function toggleLegend(){
+  const el = document.getElementById('corr-legend');
+  const tog = document.getElementById('leg-tog');
+  const isOpen = !el.classList.contains('collapsed');
+  el.classList.toggle('collapsed', isOpen);
+  tog.textContent = isOpen ? '▼' : '▲';
+}
+
+// ═══════════════════════════════════════════════════════
+// SIDEBAR ACCORDION
+// ═══════════════════════════════════════════════════════
+function toggleSection(id){
+  document.getElementById(id).classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════════════════
+// SVG UTILS
 // ═══════════════════════════════════════════════════════
 const NS = 'http://www.w3.org/2000/svg';
-function se(tag, attrs={}){
-  const e = document.createElementNS(NS, tag);
+function se(tag,attrs={}){
+  const e=document.createElementNS(NS,tag);
   Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));
   return e;
+}
+
+// ═══════════════════════════════════════════════════════
+// BUILD CORRELATION LINES
+// Thickness = r-value mapped to pixel width
+// All lines end at India (649, 254)
+// ═══════════════════════════════════════════════════════
+function buildCorrLines(){
+  const layer = document.getElementById('corr-layer');
+  layer.innerHTML = '';
+  CLUSTERS.forEach((cl,i)=>{
+    if(cl.id === 'INDIA') return; // no self-line
+    const corr = CORR[cl.id];
+    if(!corr) return;
+    const style = CORR_STYLE[corr.type];
+    const r = corr.r;
+    // width: linearly scale r (0.3-0.9) to (baseWidth-maxWidth)
+    const w = style.baseWidth + (r - 0.3) / 0.6 * (style.maxWidth - style.baseWidth);
+    // opacity: stronger correlation = more visible
+    const op = 0.15 + r * 0.45;
+    // speed class
+    const speed = r > 0.65 ? 'speed-fast' : r > 0.45 ? 'speed-med' : 'speed-slow';
+
+    // Use a quadratic bezier curve for nicer arcs
+    const mx = (cl.x + INDIA_X) / 2;
+    const my = Math.min(cl.y, INDIA_Y) - 40 - r * 30;
+    const d = `M ${cl.x} ${cl.y} Q ${mx} ${my} ${INDIA_X} ${INDIA_Y}`;
+
+    const path = se('path',{
+      d, fill:'none',
+      stroke: style.color,
+      'stroke-width': w.toFixed(2),
+      opacity: op.toFixed(2),
+      class:`corr-line flowing ${speed}`,
+      id:`corr-${cl.id}`,
+      'stroke-dasharray':'8 6',
+      'stroke-linecap':'round',
+    });
+    path.style.animationDelay = (i*0.7 % 6)+'s';
+    layer.appendChild(path);
+  });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -403,304 +757,362 @@ function se(tag, attrs={}){
 // ═══════════════════════════════════════════════════════
 function buildClusters(){
   const layer = document.getElementById('clusters-layer');
-
-  CLUSTERS.forEach((cl, i) => {
-    const cfg = G[cl.group] || G.asia;
+  CLUSTERS.forEach((cl,i)=>{
+    const cfg = GRP[cl.group]||GRP.asia;
     const col = cfg.color;
-    const cnt = (cl.members || []).length;
+    const cnt = (cl.members||[]).length;
+    const g = se('g',{id:'cl-'+cl.id,class:'cluster'});
 
-    const g = se('g', {id:'cl-'+cl.id, class:'cluster'});
-
-    // Ambient glow aura
-    const aura = se('circle', {
-      class:'c-aura', cx:cl.x, cy:cl.y, r:cfg.ring+4,
-      fill:col, opacity:'.06',
-    });
-
-    // Animated ring
-    const ring = se('circle', {
-      class:'c-ring', cx:cl.x, cy:cl.y, r:cfg.ring,
-      stroke:col,
-    });
-    ring.style.animationDelay = (i * 0.28 % 3) + 's';
-
-    // Dot body
-    const dot = se('circle', {
-      class:'c-dot', cx:cl.x, cy:cl.y, r:cfg.r, fill:col,
-    });
-
-    // Label — offset below dot, centered
-    const lbl = se('text', {
-      class:'c-label', x:cl.x, y:cl.y + cfg.r + 9,
-      'text-anchor':'middle',
-    });
-    lbl.textContent = cl.label;
-
-    // Member count badge
-    if(cnt > 1){
-      const badge = se('text', {
-        class:'c-count', x:cl.x, y:cl.y + cfg.r + 16,
-        'text-anchor':'middle',
-      });
-      badge.textContent = cnt + ' indices';
-      g.appendChild(badge);
-    }
-
-    // Large invisible hit area — MUST be last child (topmost)
-    const hit = se('circle', {
-      class:'c-hit', cx:cl.x, cy:cl.y, r:cfg.hit,
-    });
-
-    g.appendChild(aura);
+    // aura
+    g.appendChild(se('circle',{class:'c-aura',cx:cl.x,cy:cl.y,r:cfg.ring+5,fill:col,opacity:'.05'}));
+    // ring
+    const ring = se('circle',{class:'c-ring',cx:cl.x,cy:cl.y,r:cfg.ring,stroke:col});
+    ring.style.animationDelay = (i*0.32%3)+'s';
     g.appendChild(ring);
-    g.appendChild(dot);
+    // dot
+    g.appendChild(se('circle',{class:'c-dot',cx:cl.x,cy:cl.y,r:cfg.r,fill:col}));
+    // label
+    const lbl = se('text',{class:'c-label',x:cl.x,y:cl.y+cfg.r+9,'text-anchor':'middle'});
+    lbl.textContent = cl.label;
     g.appendChild(lbl);
-    g.appendChild(hit);   // ← last = topmost in SVG stacking
+    // sub-count
+    if(cnt>1){
+      const sub = se('text',{class:'c-sub',x:cl.x,y:cl.y+cfg.r+16,'text-anchor':'middle'});
+      sub.textContent = cnt+' idx';
+      g.appendChild(sub);
+    }
+    // hit area — LAST (topmost)
+    const hit = se('circle',{class:'c-hit',cx:cl.x,cy:cl.y,r:cfg.hit});
+    g.appendChild(hit);
 
-    // Attach ALL interaction events to the group
-    // Touch events for mobile
-    g.addEventListener('touchstart', e => { e.preventDefault(); onDown(e, cl, g); }, {passive:false});
-    g.addEventListener('touchend',   e => { e.preventDefault(); onClick(cl, g); },  {passive:false});
-    // Mouse events for desktop
-    g.addEventListener('mouseenter', e => onHoverIn(e, cl, g));
-    g.addEventListener('mouseleave', ()=> onHoverOut(g));
-    g.addEventListener('click',      ()=> onClick(cl, g));
+    // events
+    g.addEventListener('touchstart',e=>{e.preventDefault();ripple(cl.x,cl.y,col);},{ passive:false });
+    g.addEventListener('touchend',  e=>{e.preventDefault();onDotClick(cl,g);},   { passive:false });
+    g.addEventListener('mouseenter',e=>onHoverIn(e,cl,g));
+    g.addEventListener('mouseleave',()=>onHoverOut(g));
+    g.addEventListener('click',     ()=>onDotClick(cl,g));
 
-    layer.appendChild(g);
+    document.getElementById('clusters-layer').appendChild(g);
   });
 }
 
 // ═══════════════════════════════════════════════════════
-// RIPPLE — touch/click feedback
+// RIPPLE
 // ═══════════════════════════════════════════════════════
-function ripple(cx, cy, color){
-  const rl = document.getElementById('ripple-layer');
-  const r = se('circle', {cx, cy, r:'6', stroke:color, fill:'none', class:'ripple'});
+function ripple(cx,cy,col){
+  const rl=document.getElementById('ripple-layer');
+  const r=se('circle',{cx,cy,r:'5',stroke:col,fill:'none',class:'ripple'});
   rl.appendChild(r);
-  r.addEventListener('animationend', ()=> r.remove());
-}
-
-function onDown(e, cl, g){
-  // immediate visual feedback on touchstart
-  const cfg = G[cl.group]||G.asia;
-  ripple(cl.x, cl.y, cfg.color);
-  g.classList.add('hover');
+  r.addEventListener('animationend',()=>r.remove());
 }
 
 // ═══════════════════════════════════════════════════════
-// HOVER (desktop)
+// HOVER
 // ═══════════════════════════════════════════════════════
 const TT   = document.getElementById('tt');
-const WRAP = document.getElementById('map-wrap');
+const WRAP = document.getElementById('map-svg-wrap');
 
-function onHoverIn(e, cl, g){
+function onHoverIn(e,cl,g){
   if(!g.classList.contains('sel')) g.classList.add('hover');
-  positionTooltip(e, cl);
-  TT.classList.add('show');
+  // highlight corr line
+  const line=document.getElementById('corr-'+cl.id);
+  if(line){ line.style.opacity='0.9'; line.style.strokeWidth=(parseFloat(line.getAttribute('stroke-width'))+1.5)+''; }
+  showTooltip(e,cl);
 }
 function onHoverOut(g){
   g.classList.remove('hover');
   TT.classList.remove('show');
+  // restore line
+  buildCorrLines(); // re-render at normal opacity
 }
 
-function positionTooltip(e, cl){
-  const wr = WRAP.getBoundingClientRect();
-  let tx = e.clientX - wr.left + 16;
-  let ty = e.clientY - wr.top  - 8;
-  tx = Math.min(tx, wr.width - 256);
-  ty = Math.max(ty, 8);
+function showTooltip(e,cl){
+  const wr=WRAP.getBoundingClientRect();
+  let tx=e.clientX-wr.left+16, ty=e.clientY-wr.top-8;
+  if(tx+230>wr.width) tx=e.clientX-wr.left-240;
+  ty=Math.max(ty,8);
 
   document.getElementById('tt-n').textContent = cl.label;
   document.getElementById('tt-e').textContent =
     (cl.members||[]).map(m=>m.exchange).filter((v,i,a)=>a.indexOf(v)===i).join(' · ');
 
-  const ms = document.getElementById('tt-ms');
-  ms.innerHTML = (cl.members||[]).map(m=>
-    `<div class="tt-mem">${m.exchange} <span>${m.label}</span> — ${m.note||''}</div>`
-  ).join('');
+  // members
+  document.getElementById('tt-ms').innerHTML =
+    (cl.members||[]).slice(0,3).map(m=>
+      `<div class="tt-mem"><b>${m.label}</b> ${m.exchange} — ${m.note||''}</div>`
+    ).join('');
 
-  document.getElementById('tt-s').textContent =
-    'Sectors: ' + cl.sectors.slice(0,6).join(', ') + (cl.sectors.length>6?'…':'');
-  document.getElementById('tt-h').textContent =
-    S.sel.has(cl.id) ? '✓ Selected — click to deselect' : '↵ Click / tap to select';
-
-  TT.style.left = tx + 'px';
-  TT.style.top  = ty + 'px';
-}
-
-// ═══════════════════════════════════════════════════════
-// CLICK / TAP
-// ═══════════════════════════════════════════════════════
-function onClick(cl, g){
-  const cfg = G[cl.group]||G.asia;
-  ripple(cl.x, cl.y, cfg.color);
-
-  if(S.sel.has(cl.id)){
-    S.sel.delete(cl.id);
-    g.classList.remove('sel','hover');
+  // correlation
+  const corr=CORR[cl.id];
+  if(corr){
+    const col=CORR_STYLE[corr.type].color;
+    document.getElementById('tt-corr').innerHTML=
+      `<div class="tt-corr-row"><span>90-day r vs Sensex</span><span class="tt-corr-val" style="color:${col}">${corr.inverse?'-':''}${corr.r.toFixed(2)}</span></div>
+       <div style="font-size:7.5px;color:var(--t3);margin-top:2px">${corr.note}</div>`;
   } else {
-    S.sel.add(cl.id);
-    g.classList.remove('hover');
-    g.classList.add('sel');
+    document.getElementById('tt-corr').innerHTML='';
   }
 
-  TT.classList.remove('show');
-  refreshPanel();
-  if(S.sel.size > 0) openPanel();
-  else closePanel();
-  updateInstr();
+  document.getElementById('tt-h').textContent =
+    S.sel.has(cl.id) ? '✓ Selected — click to deselect' : '↵ Click to add to context';
+  TT.style.left=tx+'px'; TT.style.top=ty+'px';
+  TT.classList.add('show');
 }
 
 // ═══════════════════════════════════════════════════════
-// PANEL
+// CLICK
 // ═══════════════════════════════════════════════════════
-function openPanel(){  document.getElementById('panel').classList.add('open');  }
-function closePanel(){ document.getElementById('panel').classList.remove('open'); }
+function onDotClick(cl,g){
+  const col=(GRP[cl.group]||GRP.asia).color;
+  ripple(cl.x,cl.y,col);
+  S.sel.has(cl.id) ? S.sel.delete(cl.id) : S.sel.add(cl.id);
+  // update group class
+  document.querySelectorAll('.cluster').forEach(el=>{
+    const id=el.id.replace('cl-','');
+    el.classList.toggle('sel', S.sel.has(id));
+  });
+  TT.classList.remove('show');
+  refreshSidebar();
+  hideToast();
+}
 
-const clMap = Object.fromEntries(CLUSTERS.map(c=>[c.id,c]));
-
-function refreshPanel(){
+// ═══════════════════════════════════════════════════════
+// SIDEBAR RENDER
+// ═══════════════════════════════════════════════════════
+function refreshSidebar(){
   renderChips();
-  renderMembers();
   renderSectors();
   renderCommodities();
+  renderCorrBars();
   updateCTA();
 }
 
 function renderChips(){
-  const el = document.getElementById('chips');
-  document.getElementById('ph-cnt').textContent =
-    S.sel.size ? ' — '+S.sel.size+' selected' : '';
-  if(!S.sel.size){ el.innerHTML='<span style="font-family:var(--mono);font-size:9px;color:var(--t3)">Tap dots on the map</span>'; return; }
-  el.innerHTML = [...S.sel].map(id=>{
-    const cl = clMap[id]; if(!cl) return '';
-    const col = (G[cl.group]||G.asia).color;
-    return `<div class="chip" onclick="removeCluster('${id}')">
-      <div class="chip-dot" style="background:${col}"></div>
-      <span>${cl.label}</span>
-      <span style="font-size:12px;opacity:.5;margin-left:2px">×</span>
-    </div>`;
+  const el=document.getElementById('sb-chips');
+  if(!S.sel.size){
+    el.innerHTML='<span class="sb-empty">Tap dots on the map to begin</span>';
+    return;
+  }
+  el.innerHTML=[...S.sel].map(id=>{
+    const cl=clMap[id]; if(!cl) return '';
+    const col=(GRP[cl.group]||GRP.asia).color;
+    return `<span class="sb-chip" onclick="removeCluster('${id}')">
+      <span class="cdot" style="background:${col}"></span>
+      ${cl.label} <span style="opacity:.4;margin-left:2px">×</span>
+    </span>`;
   }).join('');
-}
-
-function renderMembers(){
-  const el = document.getElementById('members');
-  const all = [];
-  S.sel.forEach(id => {
-    const cl = clMap[id];
-    if(cl) (cl.members||[]).forEach(m => {
-      if(!all.find(x=>x.id===m.id)) all.push(m);
-    });
-  });
-  document.getElementById('mem-label').style.display = all.length ? '' : 'none';
-  el.innerHTML = all.map(m=>
-    `<div class="mem-tag">${m.exchange}: ${m.label}</div>`
-  ).join('');
 }
 
 function removeCluster(id){
   S.sel.delete(id);
   document.getElementById('cl-'+id)?.classList.remove('sel','hover');
-  if(!S.sel.size) closePanel();
-  refreshPanel(); updateInstr();
+  refreshSidebar();
 }
 
 function renderSectors(){
-  const implied = new Set();
-  S.sel.forEach(id => (clMap[id]?.sectors||[]).forEach(s=>implied.add(s)));
-  document.getElementById('sec-grid').innerHTML = SECTORS.map(sec=>{
-    const active = implied.size===0 || implied.has(sec.id);
-    const on = S.sectors.has(sec.id);
-    return `<div class="sec ${on?'on':''} ${active?'':'dim'}"
-      style="color:${sec.color}"
-      onclick="toggleSec('${sec.id}')">
+  const implied=new Set();
+  S.sel.forEach(id=>(clMap[id]?.sectors||[]).forEach(s=>implied.add(s)));
+  document.getElementById('sb-sec-grid').innerHTML=SECTORS.map(sec=>{
+    const active=implied.size===0||implied.has(sec.id);
+    const on=S.sectors.has(sec.id);
+    return `<div class="sec-tile ${on?'on':''} ${active?'':'dim'}"
+      style="color:${sec.color}" onclick="toggleSec('${sec.id}')">
       <span>${sec.icon}</span><span>${sec.label}</span>
     </div>`;
   }).join('');
 }
 
 function toggleSec(id){
-  S.sectors.has(id) ? S.sectors.delete(id) : S.sectors.add(id);
-  renderSectors(); renderCommodities(); updateCTA();
+  S.sectors.has(id)?S.sectors.delete(id):S.sectors.add(id);
+  renderSectors();renderCommodities();updateCTA();
 }
 
 function renderCommodities(){
-  const active = S.sectors.size>0 ? S.sectors : new Set(SECTORS.map(s=>s.id));
-  document.getElementById('com-strip').innerHTML = COMMODITY_FLAGS.map(cf=>{
-    const lit = cf.sensitive_sectors.some(s=>active.has(s))||cf.beneficiary_sectors.some(s=>active.has(s));
-    return `<div class="com ${lit?'lit':''}" title="${cf.note}">
-      <span>${cf.icon}</span><span>${cf.commodity}</span>
-      ${lit?`<span style="font-size:8px;opacity:.7;margin-left:2px">${cf.direction.split('=')[0].trim()}</span>`:''}
+  const active=S.sectors.size>0?S.sectors:new Set(SECTORS.map(s=>s.id));
+  document.getElementById('sb-com-list').innerHTML=COMMODITY_FLAGS.map(cf=>{
+    const lit=cf.sensitive_sectors.some(s=>active.has(s))||cf.beneficiary_sectors.some(s=>active.has(s));
+    const stks=(lit?cf.correlated_stocks||[]:cf.correlated_stocks||[]).slice(0,4);
+    return `<div class="com-card ${lit?'lit':''}">
+      <div class="com-hd">
+        <span class="com-icon">${cf.icon}</span>
+        <div>
+          <div class="com-name">${cf.commodity}</div>
+          <div class="com-dir">${cf.direction.split('=')[0].trim()}</div>
+        </div>
+      </div>
+      ${lit?`<div style="font-size:7px;color:var(--t3);margin-bottom:4px;line-height:1.4">${cf.note}</div>`:''}
+      <div class="com-stocks">${stks.map(s=>`<span class="com-stk">${s}</span>`).join('')}</div>
     </div>`;
   }).join('');
 }
 
-function updateCTA(){
-  const btn  = document.getElementById('btn-enter');
-  const note = document.getElementById('cta-note');
-  const summ = document.getElementById('cta-sel');
-  const has  = S.sel.size > 0;
-  btn.disabled = !has;
-  if(!has){ note.textContent='Select at least one region'; summ.textContent=''; return; }
-  const sc = S.sectors.size;
-  note.textContent = sc>0 ? sc+' sector filter'+(sc>1?'s':'')+' applied' : 'All sectors';
-  summ.textContent = [...S.sel].map(id=>clMap[id]?.label||id).join(' + ');
-}
+function renderCorrBars(){
+  const entries=Object.entries(CORR)
+    .filter(([id])=>S.sel.has(id))
+    .sort((a,b)=>b[1].r-a[1].r);
 
-function updateInstr(){
-  const msg = document.getElementById('instr-msg');
-  const sel = document.getElementById('instr-sel');
-  if(!S.sel.size){
-    msg.textContent = 'Tap any region dot to build your market context';
-    sel.textContent = '';
-  } else {
-    msg.textContent = S.sel.size+' region'+(S.sel.size>1?'s':'')+' selected';
-    sel.textContent = '↓ scroll panel · tap OPEN DASHBOARD';
+  if(!entries.length){
+    // show all bars when nothing selected
+    const all=Object.entries(CORR).sort((a,b)=>b[1].r-a[1].r);
+    document.getElementById('sb-corr-bars').innerHTML=all.map(([id,corr])=>{
+      const cl=clMap[id]; if(!cl) return '';
+      const style=CORR_STYLE[corr.type];
+      const pct=Math.round(corr.r*100);
+      return `<div class="corr-bar-row">
+        <span class="corr-bar-lbl">${cl.label}</span>
+        <div class="corr-bar-track">
+          <div class="corr-bar-fill" style="width:${pct}%;background:${style.color}"></div>
+        </div>
+        <span class="corr-val" style="color:${style.color}">${corr.inverse?'-':''}${corr.r.toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    return;
   }
+  document.getElementById('sb-corr-bars').innerHTML=entries.map(([id,corr])=>{
+    const cl=clMap[id]; if(!cl) return '';
+    const style=CORR_STYLE[corr.type];
+    const pct=Math.round(corr.r*100);
+    return `<div class="corr-bar-row">
+      <span class="corr-bar-lbl">${cl.label}</span>
+      <div class="corr-bar-track">
+        <div class="corr-bar-fill" style="width:${pct}%;background:${style.color}"></div>
+      </div>
+      <span class="corr-val" style="color:${style.color}">${corr.inverse?'-':''}${corr.r.toFixed(2)}</span>
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
-// NAVIGATION  — THE FIX
-// Uses the official Streamlit Component protocol.
-// components.html() DOES support setComponentValue when
-// the correct message format is sent to window.parent.
-// Python receives the value on the next rerun.
+// PROMPT BOX + CTA
+// Explains what dashboard will open with
+// ═══════════════════════════════════════════════════════
+// Sector → Nifty50 stocks mapping (for prompt display)
+const SECTOR_STOCKS = Object.fromEntries(SECTORS.map(s=>[s.id,s.stocks||[]]));
+
+function updateCTA(){
+  const has=S.sel.size>0;
+  document.getElementById('btn-enter').disabled=!has;
+
+  // build the prompt description
+  const promptEl=document.getElementById('prompt-body');
+  const sub=document.getElementById('cta-sub');
+
+  if(!has){
+    promptEl.innerHTML=`
+      <div class="pmt-row"><div class="pmt-dot"></div><span>Default: <b>Nifty 50</b> all sectors</span></div>
+      <div class="pmt-row"><div class="pmt-dot" style="background:var(--t3)"></div><span style="color:var(--t3)">Select a region above to customise</span></div>`;
+    sub.innerHTML='Select a market region or commodity above';
+    return;
+  }
+
+  // gather what will be filtered
+  const selClusters=[...S.sel].map(id=>clMap[id]).filter(Boolean);
+  const selSectors=[...S.sectors];
+  const hasSectors=selSectors.length>0;
+
+  // implied sectors from cluster selection
+  const impliedSecs=new Set();
+  selClusters.forEach(cl=>(cl.sectors||[]).forEach(s=>impliedSecs.add(s)));
+
+  // stocks that will show
+  const finalSecs=hasSectors?selSectors:[...impliedSecs].slice(0,4);
+  const stockSet=new Set();
+  finalSecs.forEach(s=>(SECTOR_STOCKS[s]||[]).slice(0,3).forEach(st=>stockSet.add(st)));
+  const topStocks=[...stockSet].slice(0,6);
+
+  // check if oil/commodity selected
+  const hasOil=S.sel.has('COM_OIL');
+  const hasMetals=S.sel.has('COM_METALS');
+
+  let rows='';
+  if(hasOil){
+    rows+=`<div class="pmt-row"><div class="pmt-dot" style="background:var(--amber)"></div>
+      <span>Filtered to <b>Oil & Gas</b> segment: RELIANCE, ONGC, BPCL…</span></div>`;
+  } else if(hasMetals){
+    rows+=`<div class="pmt-row"><div class="pmt-dot" style="background:var(--purple)"></div>
+      <span>Filtered to <b>Metals</b> segment: TATASTEEL, HINDALCO…</span></div>`;
+  } else if(hasSectors){
+    rows+=`<div class="pmt-row"><div class="pmt-dot"></div>
+      <span>Nifty50 filtered: <b>${selSectors.slice(0,3).join(', ')}${selSectors.length>3?'…':''}</b></span></div>`;
+  } else {
+    rows+=`<div class="pmt-row"><div class="pmt-dot"></div>
+      <span>Nifty50 filtered by <b>${selClusters.map(c=>c.label).slice(0,2).join(' + ')}</b> correlations</span></div>`;
+  }
+
+  if(topStocks.length){
+    rows+=`<div class="pmt-row"><div class="pmt-dot" style="background:var(--t3)"></div>
+      <span style="color:var(--t2)">Stocks: ${topStocks.join(', ')}${stockSet.size>6?'…':''}</span></div>`;
+  }
+
+  promptEl.innerHTML=rows;
+  const n=S.sel.size;
+  sub.innerHTML=`<span>${n} region${n>1?'s':''}</span> selected · ${S.sectors.size||'all'} sectors`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════
+let toastTimer=null;
+function showToastMsg(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),3000);
+}
+function hideToast(){document.getElementById('toast').classList.remove('show');}
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION — parent URL param technique
+// (works on Streamlit Community Cloud same-domain)
 // ═══════════════════════════════════════════════════════
 function go(){
-  const payload = {
-    indices: [...S.sel],
-    sectors: [...S.sectors],
-    members: [...S.sel].flatMap(id => (clMap[id]?.members||[]).map(m=>m.id)),
-    ts: Date.now(),
+  const payload={
+    indices:[...S.sel],
+    sectors:[...S.sectors],
+    members:[...S.sel].flatMap(id=>(clMap[id]?.members||[]).map(m=>m.id)),
+    ts:Date.now(),
+    // Prompt context — tells dashboard how to filter
+    has_oil: S.sel.has('COM_OIL'),
+    has_metals: S.sel.has('COM_METALS'),
+    has_agri: S.sel.has('COM_AGRI'),
   };
 
-  // ── METHOD A: Streamlit Component Value Protocol (primary) ──
-  // This is the official way for HTML components to communicate
-  // back to Python. Triggers a rerun with the value returned
-  // from components.html() call.
-  try {
+  // Method A: Streamlit setComponentValue (if declare_component used)
+  try{
     window.parent.postMessage({
-      isStreamlitMessage: true,
-      type: 'streamlit:setComponentValue',
-      value: payload,
-      dataType: 'json',
-    }, '*');
-  } catch(e){}
+      isStreamlitMessage:true,
+      type:'streamlit:setComponentValue',
+      value:payload,
+      dataType:'json',
+    },'*');
+  }catch(e){}
 
-  // ── METHOD B: also send plain postMessage (backup listener) ──
-  try {
-    window.parent.postMessage({
-      type: 'AVITO_CONTEXT',
-      ...payload,
-    }, '*');
-  } catch(e){}
+  // Method B: URL navigation (works with components.html + query_params)
+  try{
+    const url=new URL(window.parent.location.href);
+    url.searchParams.set('_avito',encodeURIComponent(JSON.stringify(payload)));
+    window.parent.location.replace(url.toString());
+  }catch(e){
+    // same-frame fallback
+    try{
+      const url=new URL(window.location.href);
+      url.searchParams.set('_avito',encodeURIComponent(JSON.stringify(payload)));
+      window.location.replace(url.toString());
+    }catch(e2){}
+  }
 }
 
 // ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
+buildCorrLines();
 buildClusters();
+renderSectors();
 renderCommodities();
+renderCorrBars();
+
+// show toast after 1.5s
+setTimeout(()=>showToastMsg('Click any dot to explore its correlation with Sensex'),1500);
 </script>
 </body>
 </html>
