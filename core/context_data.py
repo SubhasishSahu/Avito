@@ -1,92 +1,253 @@
 """
 core/context_data.py
-Static reference data: indices, sectors, commodity flags.
+Clustered index model — one dot per city/region.
+Each CLUSTER has member sub-indices shown on expand.
+Selecting a cluster selects all its member sectors (union).
 """
 from __future__ import annotations
 
-INDICES: list[dict] = [
-    # ── INDIA ──
-    {"id":"NIFTY50",   "label":"Nifty 50",       "exchange":"NSE",    "city":"Mumbai",    "x":649,"y":254,"region":"India",       "group":"india",    "sectors":["Banking","IT","Energy","Auto","Pharma","NBFC","Finance","Infrastructure","Metals","FMCG","Defence","Cement","Utilities"]},
-    {"id":"NIFTYBANK", "label":"Nifty Bank",      "exchange":"NSE",    "city":"Mumbai",    "x":655,"y":250,"region":"India",       "group":"india",    "sectors":["Banking","NBFC","Finance"]},
-    {"id":"NIFTYIT",   "label":"Nifty IT",        "exchange":"NSE",    "city":"Mumbai",    "x":655,"y":258,"region":"India",       "group":"india",    "sectors":["IT"]},
-    {"id":"SENSEX",    "label":"Sensex",           "exchange":"BSE",    "city":"Mumbai",    "x":643,"y":252,"region":"India",       "group":"india",    "sectors":["Banking","IT","Energy","Auto","Pharma","Finance","Metals","FMCG"]},
-    # ── ASIA PACIFIC ──
-    {"id":"NIKKEI",    "label":"Nikkei 225",       "exchange":"TSE",    "city":"Tokyo",     "x":820,"y":192,"region":"Asia",        "group":"asia",     "sectors":["Auto","IT","Metals","Energy"]},
-    {"id":"HANGSENG",  "label":"Hang Seng",        "exchange":"HKEX",   "city":"Hong Kong", "x":791,"y":242,"region":"Asia",        "group":"asia",     "sectors":["Metals","Energy","Finance","IT"]},
-    {"id":"SHANGHAI",  "label":"SSE Composite",    "exchange":"SSE",    "city":"Shanghai",  "x":784,"y":214,"region":"Asia",        "group":"asia",     "sectors":["Metals","Energy","Infrastructure","Auto"]},
-    {"id":"SGX",       "label":"STI",              "exchange":"SGX",    "city":"Singapore", "x":773,"y":289,"region":"Asia",        "group":"asia",     "sectors":["Banking","Energy","Logistics","Finance"]},
-    {"id":"KOSPI",     "label":"KOSPI",            "exchange":"KRX",    "city":"Seoul",     "x":807,"y":200,"region":"Asia",        "group":"asia",     "sectors":["IT","Auto","Metals"]},
-    {"id":"ASX200",    "label":"ASX 200",          "exchange":"ASX",    "city":"Sydney",    "x":855,"y":378,"region":"Asia-Pac",    "group":"asia",     "sectors":["Metals","Mining","Energy","Banking"]},
-    # ── EUROPE ──
-    {"id":"FTSE100",   "label":"FTSE 100",         "exchange":"LSE",    "city":"London",    "x":433,"y":148,"region":"Europe",      "group":"europe",   "sectors":["Banking","Energy","Metals","Pharma","Finance"]},
-    {"id":"DAX",       "label":"DAX 40",           "exchange":"XETRA",  "city":"Frankfurt", "x":462,"y":148,"region":"Europe",      "group":"europe",   "sectors":["Auto","IT","Metals","Engineering"]},
-    {"id":"CAC40",     "label":"CAC 40",           "exchange":"Euronext","city":"Paris",    "x":447,"y":158,"region":"Europe",      "group":"europe",   "sectors":["Auto","Pharma","Banking","FMCG","Logistics"]},
-    {"id":"EUROSTOXX", "label":"Euro Stoxx 50",    "exchange":"Euronext","city":"Amsterdam","x":456,"y":142,"region":"Europe",      "group":"europe",   "sectors":["Banking","Auto","Energy","IT"]},
-    {"id":"SMI",       "label":"SMI Switzerland",  "exchange":"SIX",    "city":"Zurich",    "x":462,"y":158,"region":"Europe",      "group":"europe",   "sectors":["Pharma","Banking","FMCG"]},
-    # ── AMERICAS ──
-    {"id":"SP500",     "label":"S&P 500",          "exchange":"NYSE",   "city":"New York",  "x":213,"y":192,"region":"Americas",    "group":"americas", "sectors":["IT","Banking","Energy","Pharma","Auto","Finance"]},
-    {"id":"NASDAQ",    "label":"Nasdaq 100",        "exchange":"NASDAQ", "city":"New York",  "x":217,"y":196,"region":"Americas",    "group":"americas", "sectors":["IT","Finance"]},
-    {"id":"DJIA",      "label":"Dow Jones",         "exchange":"NYSE",   "city":"New York",  "x":209,"y":195,"region":"Americas",    "group":"americas", "sectors":["Banking","IT","Auto","Energy","Pharma"]},
-    {"id":"TSX",       "label":"TSX Composite",    "exchange":"TSX",    "city":"Toronto",   "x":200,"y":165,"region":"Americas",    "group":"americas", "sectors":["Mining","Energy","Banking","Metals"]},
-    {"id":"BOVESPA",   "label":"Bovespa",           "exchange":"B3",     "city":"São Paulo", "x":280,"y":345,"region":"Americas",    "group":"americas", "sectors":["Metals","Energy","Banking","Mining"]},
-    # ── MIDDLE EAST ──
-    {"id":"TADAWUL",   "label":"Tadawul",           "exchange":"Tadawul","city":"Riyadh",   "x":557,"y":248,"region":"Middle East", "group":"mideast",  "sectors":["Energy","Banking","Infrastructure"]},
-    {"id":"DFMGI",     "label":"DFM Dubai",         "exchange":"DFM",    "city":"Dubai",    "x":574,"y":258,"region":"Middle East", "group":"mideast",  "sectors":["Energy","Banking","Infrastructure","Logistics"]},
-    # ── AFRICA ──
-    {"id":"JSE",       "label":"JSE All Share",     "exchange":"JSE",    "city":"Johannesburg","x":507,"y":368,"region":"Africa",   "group":"africa",   "sectors":["Metals","Mining","Banking","Energy"]},
-    {"id":"EGX30",     "label":"EGX 30",            "exchange":"EGX",    "city":"Cairo",    "x":500,"y":235,"region":"Africa",      "group":"africa",   "sectors":["Banking","Energy","Infrastructure"]},
-    # ── COMMODITY HUBS ──
-    {"id":"BRENT",     "label":"Brent Crude",       "exchange":"ICE",    "city":"London/ICE","x":428,"y":138,"region":"Commodity",  "group":"commodity","sectors":["Energy","FMCG","Logistics","Auto","Cement"]},
-    {"id":"WTI",       "label":"WTI Crude",         "exchange":"NYMEX",  "city":"Cushing OK","x":198,"y":200,"region":"Commodity",  "group":"commodity","sectors":["Energy","FMCG","Logistics"]},
-    {"id":"LME_CU",    "label":"LME Copper",        "exchange":"LME",    "city":"London",   "x":436,"y":143,"region":"Commodity",   "group":"commodity","sectors":["Metals","Mining","Infrastructure","Engineering"]},
-    {"id":"GOLD_COMEX","label":"Gold",              "exchange":"COMEX",  "city":"New York", "x":206,"y":188,"region":"Commodity",   "group":"commodity","sectors":["Banking","Finance"]},
-    {"id":"DUBAI_OIL", "label":"Dubai Crude",       "exchange":"DME",    "city":"Dubai",    "x":570,"y":252,"region":"Commodity",   "group":"commodity","sectors":["Energy","Logistics"]},
-    {"id":"BDI",       "label":"Baltic Dry",        "exchange":"Baltic", "city":"London",   "x":430,"y":153,"region":"Commodity",   "group":"commodity","sectors":["Logistics","Metals","FMCG","Energy"]},
-    {"id":"PALM_OIL",  "label":"Palm Oil",          "exchange":"Bursa",  "city":"Kuala Lumpur","x":768,"y":285,"region":"Commodity","group":"commodity","sectors":["FMCG"]},
+# ══════════════════════════════════════════════════════════════
+# CLUSTERS  — one dot on the map per geographic location
+# members[] = sub-indices inside the cluster
+# sectors   = union of all member sectors
+# ══════════════════════════════════════════════════════════════
+CLUSTERS: list[dict] = [
+
+    # ── INDIA ──────────────────────────────────────────────────
+    {
+        "id": "INDIA", "label": "India", "city": "Mumbai",
+        "x": 649, "y": 254, "group": "india",
+        "members": [
+            {"id":"NIFTY50",   "label":"Nifty 50",      "exchange":"NSE", "note":"Broad market — 50 large caps"},
+            {"id":"NIFTYBANK", "label":"Nifty Bank",     "exchange":"NSE", "note":"Top 12 banking stocks"},
+            {"id":"NIFTYIT",   "label":"Nifty IT",       "exchange":"NSE", "note":"Top IT sector index"},
+            {"id":"SENSEX",    "label":"Sensex",          "exchange":"BSE", "note":"BSE flagship — 30 stocks"},
+        ],
+        "sectors": ["Banking","IT","Energy","Auto","Pharma","NBFC","Finance",
+                    "Infrastructure","Metals","FMCG","Defence","Cement","Utilities"],
+    },
+
+    # ── JAPAN ──────────────────────────────────────────────────
+    {
+        "id": "JAPAN", "label": "Japan", "city": "Tokyo",
+        "x": 820, "y": 192, "group": "asia",
+        "members": [
+            {"id":"NIKKEI",  "label":"Nikkei 225",  "exchange":"TSE",  "note":"225 large Japanese companies"},
+            {"id":"TOPIX",   "label":"TOPIX",        "exchange":"TSE",  "note":"All Tokyo Stock Exchange 1st section"},
+        ],
+        "sectors": ["Auto","IT","Metals","Energy","Engineering"],
+    },
+
+    # ── HONG KONG / CHINA ──────────────────────────────────────
+    {
+        "id": "CHINA_HK", "label": "China/HK", "city": "Hong Kong",
+        "x": 791, "y": 235, "group": "asia",
+        "members": [
+            {"id":"HANGSENG", "label":"Hang Seng",      "exchange":"HKEX", "note":"HK blue chips"},
+            {"id":"SHANGHAI", "label":"SSE Composite",  "exchange":"SSE",  "note":"All Shanghai-listed stocks"},
+            {"id":"CSI300",   "label":"CSI 300",        "exchange":"SSE",  "note":"Top 300 A-share companies"},
+        ],
+        "sectors": ["Metals","Energy","Finance","IT","Infrastructure","Auto"],
+    },
+
+    # ── SOUTHEAST ASIA / SINGAPORE ─────────────────────────────
+    {
+        "id": "SEA", "label": "SE Asia", "city": "Singapore",
+        "x": 773, "y": 289, "group": "asia",
+        "members": [
+            {"id":"SGX",   "label":"STI Singapore", "exchange":"SGX",  "note":"Straits Times Index — 30 stocks"},
+            {"id":"SET50", "label":"SET 50",        "exchange":"SET",  "note":"Thailand top 50"},
+            {"id":"JKSE",  "label":"IDX Composite", "exchange":"IDX",  "note":"Indonesia all stocks"},
+        ],
+        "sectors": ["Banking","Energy","Logistics","Finance","FMCG"],
+    },
+
+    # ── SOUTH KOREA ────────────────────────────────────────────
+    {
+        "id": "KOREA", "label": "Korea", "city": "Seoul",
+        "x": 807, "y": 200, "group": "asia",
+        "members": [
+            {"id":"KOSPI",  "label":"KOSPI",    "exchange":"KRX", "note":"Korea Composite Stock Index"},
+            {"id":"KOSDAQ", "label":"KOSDAQ",   "exchange":"KRX", "note":"Korea tech & growth companies"},
+        ],
+        "sectors": ["IT","Auto","Metals","Pharma"],
+    },
+
+    # ── AUSTRALIA ──────────────────────────────────────────────
+    {
+        "id": "AUSTRALIA", "label": "Australia", "city": "Sydney",
+        "x": 855, "y": 378, "group": "asia",
+        "members": [
+            {"id":"ASX200", "label":"ASX 200", "exchange":"ASX", "note":"Top 200 Australian companies"},
+        ],
+        "sectors": ["Metals","Mining","Energy","Banking"],
+    },
+
+    # ── UK / LONDON ────────────────────────────────────────────
+    {
+        "id": "LONDON", "label": "London", "city": "London",
+        "x": 433, "y": 148, "group": "europe",
+        "members": [
+            {"id":"FTSE100", "label":"FTSE 100",    "exchange":"LSE", "note":"UK top 100 companies"},
+            {"id":"FTSE250", "label":"FTSE 250",    "exchange":"LSE", "note":"UK mid-cap index"},
+        ],
+        "sectors": ["Banking","Energy","Metals","Pharma","Finance","Mining"],
+    },
+
+    # ── EUROPE CONTINENT ───────────────────────────────────────
+    {
+        "id": "EUROPE", "label": "Europe", "city": "Frankfurt",
+        "x": 462, "y": 150, "group": "europe",
+        "members": [
+            {"id":"DAX",       "label":"DAX 40",        "exchange":"XETRA",   "note":"German top 40"},
+            {"id":"CAC40",     "label":"CAC 40",        "exchange":"Euronext", "note":"French top 40"},
+            {"id":"EUROSTOXX", "label":"Euro Stoxx 50", "exchange":"Euronext", "note":"Eurozone top 50"},
+            {"id":"SMI",       "label":"SMI",           "exchange":"SIX",      "note":"Swiss top 20"},
+        ],
+        "sectors": ["Auto","IT","Metals","Engineering","Pharma","Banking","FMCG","Logistics"],
+    },
+
+    # ── US MARKETS ─────────────────────────────────────────────
+    {
+        "id": "US", "label": "US Markets", "city": "New York",
+        "x": 213, "y": 192, "group": "americas",
+        "members": [
+            {"id":"SP500",  "label":"S&P 500",    "exchange":"NYSE",   "note":"500 large US companies"},
+            {"id":"NASDAQ", "label":"Nasdaq 100", "exchange":"NASDAQ", "note":"100 largest non-financial"},
+            {"id":"DJIA",   "label":"Dow Jones",  "exchange":"NYSE",   "note":"30 blue-chip industrials"},
+        ],
+        "sectors": ["IT","Banking","Energy","Pharma","Auto","Finance","FMCG"],
+    },
+
+    # ── CANADA ─────────────────────────────────────────────────
+    {
+        "id": "CANADA", "label": "Canada", "city": "Toronto",
+        "x": 200, "y": 165, "group": "americas",
+        "members": [
+            {"id":"TSX", "label":"TSX Composite", "exchange":"TSX", "note":"Canada's main exchange"},
+        ],
+        "sectors": ["Mining","Energy","Banking","Metals"],
+    },
+
+    # ── BRAZIL ─────────────────────────────────────────────────
+    {
+        "id": "BRAZIL", "label": "Brazil", "city": "São Paulo",
+        "x": 280, "y": 345, "group": "americas",
+        "members": [
+            {"id":"BOVESPA", "label":"Bovespa", "exchange":"B3", "note":"Brazil's main index"},
+        ],
+        "sectors": ["Metals","Energy","Banking","Mining"],
+    },
+
+    # ── MIDDLE EAST ────────────────────────────────────────────
+    {
+        "id": "MIDEAST", "label": "Middle East", "city": "Dubai",
+        "x": 565, "y": 253, "group": "mideast",
+        "members": [
+            {"id":"TADAWUL", "label":"Tadawul",   "exchange":"Saudi", "note":"Saudi Arabia main market"},
+            {"id":"DFMGI",   "label":"DFM Dubai", "exchange":"DFM",   "note":"Dubai Financial Market"},
+            {"id":"ADX",     "label":"ADX",       "exchange":"ADX",   "note":"Abu Dhabi Securities Exchange"},
+        ],
+        "sectors": ["Energy","Banking","Infrastructure","Logistics"],
+    },
+
+    # ── AFRICA ─────────────────────────────────────────────────
+    {
+        "id": "AFRICA", "label": "Africa", "city": "Johannesburg",
+        "x": 507, "y": 365, "group": "africa",
+        "members": [
+            {"id":"JSE",   "label":"JSE All Share", "exchange":"JSE", "note":"South Africa main index"},
+            {"id":"EGX30", "label":"EGX 30",        "exchange":"EGX", "note":"Egypt's blue chips"},
+        ],
+        "sectors": ["Metals","Mining","Banking","Energy","Infrastructure"],
+    },
+
+    # ── COMMODITY: OIL ─────────────────────────────────────────
+    {
+        "id": "COM_OIL", "label": "Crude Oil", "city": "Oil Hubs",
+        "x": 430, "y": 136, "group": "commodity",
+        "members": [
+            {"id":"BRENT",    "label":"Brent Crude",  "exchange":"ICE",   "note":"Global benchmark, North Sea"},
+            {"id":"WTI",      "label":"WTI Crude",    "exchange":"NYMEX", "note":"US benchmark, Cushing OK"},
+            {"id":"DUBAI_OIL","label":"Dubai Crude",  "exchange":"DME",   "note":"Middle East benchmark"},
+        ],
+        "sectors": ["Energy","FMCG","Logistics","Auto","Cement"],
+    },
+
+    # ── COMMODITY: METALS ──────────────────────────────────────
+    {
+        "id": "COM_METALS", "label": "Metals", "city": "LME London",
+        "x": 424, "y": 155, "group": "commodity",
+        "members": [
+            {"id":"LME_CU",  "label":"LME Copper", "exchange":"LME",   "note":"Global copper benchmark"},
+            {"id":"LME_AL",  "label":"LME Aluminium","exchange":"LME",  "note":"Global aluminium benchmark"},
+            {"id":"GOLD",    "label":"Gold (COMEX)", "exchange":"COMEX","note":"Safe haven & jewellery demand"},
+            {"id":"COAL",    "label":"Coking Coal",  "exchange":"Qld",  "note":"Steelmaking coal — Australia"},
+        ],
+        "sectors": ["Metals","Mining","Infrastructure","Engineering","Banking","Finance"],
+    },
+
+    # ── COMMODITY: AGRI / SHIPPING ─────────────────────────────
+    {
+        "id": "COM_AGRI", "label": "Agri/Freight", "city": "Global",
+        "x": 500, "y": 130, "group": "commodity",
+        "members": [
+            {"id":"PALM_OIL","label":"Palm Oil",       "exchange":"Bursa", "note":"Edible oil — MY/ID supply"},
+            {"id":"BDI",     "label":"Baltic Dry",     "exchange":"Baltic","note":"Global dry freight costs"},
+            {"id":"USDINR",  "label":"USD/INR",        "exchange":"NSE",   "note":"Rupee exchange rate"},
+        ],
+        "sectors": ["FMCG","Logistics","IT","Pharma","Energy","Metals"],
+    },
 ]
 
+# ══════════════════════════════════════════════════════════════
+# SECTORS
+# ══════════════════════════════════════════════════════════════
 SECTORS: list[dict] = [
-    {"id":"Banking",       "label":"Banking",   "icon":"🏦","color":"#38b6ff","stocks":["HDFCBANK","ICICIBANK","SBIN","KOTAKBANK","AXISBANK"]},
-    {"id":"IT",            "label":"IT",        "icon":"💻","color":"#a78bfa","stocks":["TCS","INFY","HCLTECH","WIPRO","TECHM"]},
-    {"id":"Energy",        "label":"Energy",    "icon":"⚡","color":"#f5a623","stocks":["RELIANCE","ONGC","BPCL","ADANIGREEN","NTPC"]},
-    {"id":"Auto",          "label":"Auto",      "icon":"🚗","color":"#34d399","stocks":["MARUTI","M&M","BAJAJ-AUTO","HEROMOTOCO","EICHERMOT"]},
-    {"id":"Pharma",        "label":"Pharma",    "icon":"💊","color":"#f472b6","stocks":["SUNPHARMA","DRREDDY","CIPLA","DIVISLAB","LAURUSLABS"]},
-    {"id":"Metals",        "label":"Metals",    "icon":"⚙️","color":"#94a3b8","stocks":["TATASTEEL","JSWSTEEL","HINDALCO","NMDC","NATIONALUM"]},
-    {"id":"FMCG",          "label":"FMCG",      "icon":"🛒","color":"#00e5a0","stocks":["HINDUNILVR","ITC","NESTLEIND","BRITANNIA","TATACONSUM"]},
-    {"id":"Finance",       "label":"Finance",   "icon":"📈","color":"#22d3ee","stocks":["BAJFINANCE","JIOFIN","PFC","RECLTD","CAMS"]},
-    {"id":"Infrastructure","label":"Infra",     "icon":"🏗️","color":"#fb923c","stocks":["LT","ADANIPORTS","RVNL","GPPL","ENGINERSIN"]},
-    {"id":"Defence",       "label":"Defence",   "icon":"🛡️","color":"#ff4757","stocks":["HAL","MAZDOCK","BDL","ZENTEC","PARAS"]},
-    {"id":"NBFC",          "label":"NBFC",      "icon":"🏛️","color":"#6366f1","stocks":["BAJFINANCE","BAJAJFINSV","SPANDANA"]},
-    {"id":"Cement",        "label":"Cement",    "icon":"🏚️","color":"#d4a574","stocks":["ULTRACEMCO","GRASIM"]},
-    {"id":"Mining",        "label":"Mining",    "icon":"⛏️","color":"#84cc16","stocks":["COALINDIA","NMDC","HINDCOPPER"]},
-    {"id":"Logistics",     "label":"Logistics", "icon":"🚢","color":"#e879f9","stocks":["DELHIVERY","ADANIPORTS"]},
-    {"id":"Utilities",     "label":"Utilities", "icon":"🔌","color":"#2dd4bf","stocks":["POWERGRID","NTPC"]},
+    {"id":"Banking",        "label":"Banking",    "icon":"🏦","color":"#38b6ff","stocks":["HDFCBANK","ICICIBANK","SBIN","KOTAKBANK","AXISBANK"]},
+    {"id":"IT",             "label":"IT",         "icon":"💻","color":"#a78bfa","stocks":["TCS","INFY","HCLTECH","WIPRO","TECHM"]},
+    {"id":"Energy",         "label":"Energy",     "icon":"⚡","color":"#f5a623","stocks":["RELIANCE","ONGC","BPCL","ADANIGREEN","NTPC"]},
+    {"id":"Auto",           "label":"Auto",       "icon":"🚗","color":"#34d399","stocks":["MARUTI","M&M","BAJAJ-AUTO","HEROMOTOCO","EICHERMOT"]},
+    {"id":"Pharma",         "label":"Pharma",     "icon":"💊","color":"#f472b6","stocks":["SUNPHARMA","DRREDDY","CIPLA","DIVISLAB","LAURUSLABS"]},
+    {"id":"Metals",         "label":"Metals",     "icon":"⚙️","color":"#94a3b8","stocks":["TATASTEEL","JSWSTEEL","HINDALCO","NMDC","NATIONALUM"]},
+    {"id":"FMCG",           "label":"FMCG",       "icon":"🛒","color":"#00e5a0","stocks":["HINDUNILVR","ITC","NESTLEIND","BRITANNIA","TATACONSUM"]},
+    {"id":"Finance",        "label":"Finance",    "icon":"📈","color":"#22d3ee","stocks":["BAJFINANCE","JIOFIN","PFC","RECLTD","CAMS"]},
+    {"id":"Infrastructure", "label":"Infra",      "icon":"🏗️","color":"#fb923c","stocks":["LT","ADANIPORTS","RVNL","GPPL","ENGINERSIN"]},
+    {"id":"Defence",        "label":"Defence",    "icon":"🛡️","color":"#ff4757","stocks":["HAL","MAZDOCK","BDL","ZENTEC","PARAS"]},
+    {"id":"NBFC",           "label":"NBFC",       "icon":"🏛️","color":"#6366f1","stocks":["BAJFINANCE","BAJAJFINSV","SPANDANA"]},
+    {"id":"Cement",         "label":"Cement",     "icon":"🏚️","color":"#d4a574","stocks":["ULTRACEMCO","GRASIM"]},
+    {"id":"Mining",         "label":"Mining",     "icon":"⛏️","color":"#84cc16","stocks":["COALINDIA","NMDC","HINDCOPPER"]},
+    {"id":"Logistics",      "label":"Logistics",  "icon":"🚢","color":"#e879f9","stocks":["DELHIVERY","ADANIPORTS"]},
+    {"id":"Utilities",      "label":"Utilities",  "icon":"🔌","color":"#2dd4bf","stocks":["POWERGRID","NTPC"]},
 ]
 
+# ══════════════════════════════════════════════════════════════
+# COMMODITY FLAGS
+# ══════════════════════════════════════════════════════════════
 COMMODITY_FLAGS: list[dict] = [
-    {"commodity":"Brent Crude","symbol":"BRENT","icon":"🛢️",
-     "direction":"↑ price = headwind for importers, windfall for upstream",
+    {"commodity":"Crude Oil","symbol":"OIL","icon":"🛢️",
+     "direction":"↑ = headwind for importers, windfall for upstream",
      "sensitive_sectors":["Energy","FMCG","Auto","Logistics","Cement"],
      "beneficiary_sectors":["Energy"],
      "note":"India imports ~85% of crude. Every $10/bbl rise costs ~₹70,000 cr/yr.",
      "correlated_stocks":["RELIANCE","ONGC","BPCL","HINDUNILVR","MARUTI"]},
-    {"commodity":"LME Copper","symbol":"LME_CU","icon":"🔶",
-     "direction":"↑ price = input cost rise; signals global growth",
+    {"commodity":"Base Metals","symbol":"METALS","icon":"🔶",
+     "direction":"↑ = input cost rise; also signals global growth momentum",
      "sensitive_sectors":["Metals","Infrastructure","Engineering","Auto"],
      "beneficiary_sectors":["Metals","Mining"],
-     "note":"India imports ~50% copper needs. Rising with EV and infra build.",
+     "note":"LME Copper is the bellwether. India imports ~50% of copper needs.",
      "correlated_stocks":["HINDALCO","NMDC","HINDCOPPER","LT","BHEL"]},
     {"commodity":"Coking Coal","symbol":"COAL","icon":"⬛",
-     "direction":"↑ price = steelmaker margin compression",
-     "sensitive_sectors":["Metals","Cement","Energy"],
+     "direction":"↑ = steelmaker margin compression",
+     "sensitive_sectors":["Metals","Cement"],
      "beneficiary_sectors":["Mining"],
-     "note":"India imports ~80% coking coal from Australia. Freight amplifies impact.",
+     "note":"India imports ~80% from Australia. Freight amplifies impact.",
      "correlated_stocks":["TATASTEEL","JSWSTEEL","ULTRACEMCO","COALINDIA"]},
-    {"commodity":"Palm Oil","symbol":"PALM_OIL","icon":"🌴",
-     "direction":"↑ price = FMCG input cost headwind",
+    {"commodity":"Palm Oil","symbol":"PALMOIL","icon":"🌴",
+     "direction":"↑ = FMCG input cost headwind",
      "sensitive_sectors":["FMCG"],
      "beneficiary_sectors":[],
-     "note":"India is world's largest palm oil importer. Malaysia & Indonesia supply 90%+.",
+     "note":"India is world's largest importer. Malaysia & Indonesia supply 90%+.",
      "correlated_stocks":["HINDUNILVR","BRITANNIA","NESTLEIND","TATACONSUM"]},
     {"commodity":"USD / INR","symbol":"USDINR","icon":"💱",
      "direction":"Rupee weakens → IT & Pharma exports gain in INR terms",
@@ -94,28 +255,29 @@ COMMODITY_FLAGS: list[dict] = [
      "beneficiary_sectors":["IT","Pharma"],
      "note":"Every ₹1 depreciation adds ~1.5–2% to IT sector revenue in INR.",
      "correlated_stocks":["TCS","INFY","SUNPHARMA","DRREDDY","WIPRO"]},
-    {"commodity":"Baltic Dry Index","symbol":"BDI","icon":"🚢",
-     "direction":"↑ = higher freight → import costs rise across sectors",
+    {"commodity":"Freight (BDI)","symbol":"BDI","icon":"🚢",
+     "direction":"↑ = higher import costs across commodity-dependent sectors",
      "sensitive_sectors":["Logistics","Metals","FMCG","Energy"],
      "beneficiary_sectors":["Logistics"],
-     "note":"Red Sea disruptions adding 12–18 days to Europe–Asia shipping routes.",
+     "note":"Red Sea disruptions adding 12–18 days to Europe–Asia routes.",
      "correlated_stocks":["DELHIVERY","ADANIPORTS","TATASTEEL","HINDUNILVR"]},
-    {"commodity":"Gold","symbol":"GOLD","icon":"🥇",
-     "direction":"↑ = safe-haven demand; widens current account deficit",
-     "sensitive_sectors":["Banking","Finance"],
-     "beneficiary_sectors":[],
-     "note":"India imports 800–900 tonnes/yr. High prices widen CAD.",
-     "correlated_stocks":["HDFCBANK","SBIN","BAJFINANCE"]},
 ]
 
-def get_indices() -> list[dict]:         return INDICES
+def get_clusters() -> list[dict]:        return CLUSTERS
 def get_sectors() -> list[dict]:         return SECTORS
 def get_commodity_flags() -> list[dict]: return COMMODITY_FLAGS
 
-def sectors_for_indices(index_ids: list[str]) -> list[str]:
-    idx_map = {i["id"]: i for i in INDICES}
-    result: set[str] = set()
-    for iid in index_ids:
-        if iid in idx_map:
-            result.update(idx_map[iid]["sectors"])
-    return sorted(result)
+# back-compat shim — landing.html still injects __INDICES__
+def get_indices() -> list[dict]:
+    """Flatten clusters into individual index records for back-compat."""
+    out = []
+    for c in CLUSTERS:
+        out.append({
+            "id": c["id"], "label": c["label"], "city": c["city"],
+            "x": c["x"], "y": c["y"], "group": c["group"],
+            "region": c.get("region", c["city"]),
+            "sectors": c["sectors"],
+            "members": c["members"],
+            "exchange": "/".join(set(m["exchange"] for m in c["members"])),
+        })
+    return out
