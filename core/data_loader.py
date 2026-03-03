@@ -312,12 +312,7 @@ def _fetch_enc_file(path: str) -> Any:
     r.raise_for_status()
     return _decrypt_json(r.json()["content"].replace("\n", ""))
 
-# NOTE: These replace the mock versions defined above only when live secrets exist.
-# If secrets are missing or the fetch fails, the mock versions remain in effect.
-_mock_get_harvest_meta  = get_harvest_meta   # save mock reference
-_mock_get_snapshot      = get_snapshot
-_mock_get_nifty_series  = get_nifty_series
-
+# Public API — tries live GitHub fetch first, falls back to mock if unavailable.
 def get_harvest_meta() -> dict:
     if _is_live():
         try:
