@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVITO — Portfolio Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:       #070a0d;
+  --s1:       #0b0f14;
+  --s2:       #0f1520;
+  --s3:       #141c28;
+  --border:   #1a2535;
+  --border2:  #243044;
+  --green:    #00e5a0;
+  --green2:   rgba(0,229,160,.12);
+  --amber:    #f5a623;
+  --amber2:   rgba(245,166,35,.12);
+  --blue:     #38b6ff;
+  --blue2:    rgba(56,182,255,.1);
+  --red:      #ff4757;
+  --red2:     rgba(255,71,87,.1);
+  --text:     #b8cce0;
+  --text2:    #6a8aa8;
+  --text3:    #3d5570;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --pw:       360px;
+  --spd:      .42s;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;overflow:hidden}
+
+/* CRT scanlines */
+body::after{
+content:’’;position:fixed;inset:0;z-index:9999;pointer-events:none;
+background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px);
+}
+/* Subtle grid bg */
+body::before{
+content:’’;position:fixed;inset:0;pointer-events:none;
+background-image:
+linear-gradient(var(–border) 1px,transparent 1px),
+linear-gradient(90deg,var(–border) 1px,transparent 1px);
+background-size:40px 40px;
+opacity:.25;
+}
+
+/* ════ LAYOUT ════ */
+#wrap{display:flex;height:100vh;position:relative}
+
+/* ════ SLIDE PANEL ════ */
+#panel{
+position:fixed;top:0;left:0;height:100vh;width:var(–pw);
+background:var(–s1);border-right:1px solid var(–border);
+transform:translateX(calc(-1 * var(–pw)));
+transition:transform var(–spd) cubic-bezier(.16,1,.3,1);
+z-index:80;display:flex;flex-direction:column;
+box-shadow:20px 0 80px rgba(0,0,0,.7);
+}
+#panel.open{transform:translateX(0)}
+
+#ptab{
+position:fixed;top:50%;left:0;
+transform:translateY(-50%);
+width:22px;height:72px;
+background:var(–s2);
+border:1px solid var(–border);border-left:none;
+border-radius:0 6px 6px 0;
+cursor:pointer;z-index:81;
+display:flex;align-items:center;justify-content:center;
+transition:left var(–spd) cubic-bezier(.16,1,.3,1),background .2s;
+}
+#ptab:hover{background:var(–s3)}
+#ptab.shifted{left:var(–pw)}
+#ptab svg{transition:transform .3s;color:var(–text2)}
+#ptab.shifted svg{transform:scaleX(-1)}
+
+.ph{ /* panel header */
+padding:24px 20px 18px;
+border-bottom:1px solid var(–border);flex-shrink:0;
+}
+.ph-tag{
+font-family:var(–mono);font-size:9px;letter-spacing:.18em;
+text-transform:uppercase;color:var(–green);margin-bottom:6px;
+}
+.ph h2{font-size:15px;font-weight:500;color:var(–text);letter-spacing:-.01em}
+.ph p{font-size:11px;color:var(–text2);margin-top:3px}
+
+.pb{ /* panel body */
+flex:1;overflow-y:auto;padding:18px 20px;
+scrollbar-width:thin;scrollbar-color:var(–border2) transparent;
+}
+
+.ps{ /* panel section */
+margin-bottom:26px;
+}
+.ps-label{
+font-family:var(–mono);font-size:9px;letter-spacing:.14em;
+text-transform:uppercase;color:var(–text3);
+margin-bottom:10px;
+display:flex;align-items:center;gap:8px;
+}
+.ps-label::after{content:’’;flex:1;height:1px;background:var(–border)}
+
+/* Toggle rows */
+.tr{
+display:flex;align-items:center;justify-content:space-between;
+padding:9px 0;border-bottom:1px solid var(–border);
+}
+.tr:last-child{border:none}
+.tl{font-size:12px;color:var(–text)}
+.ts{font-size:11px;color:var(–text3);margin-top:2px;font-family:var(–mono)}
+
+.tog{position:relative;width:34px;height:19px;cursor:pointer;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0}
+.tog-tr{position:absolute;inset:0;background:var(–s3);border:1px solid var(–border2);border-radius:9px;transition:all .2s}
+.tog-th{
+position:absolute;top:3px;left:3px;
+width:13px;height:13px;border-radius:50%;
+background:var(–text3);transition:all .2s;
+}
+.tog input:checked~.tog-tr{background:rgba(0,229,160,.15);border-color:var(–green)}
+.tog input:checked~.tog-th{transform:translateX(15px);background:var(–green)}
+
+/* Upload zone */
+#uz{
+border:1px dashed var(–border2);border-radius:8px;
+padding:20px 16px;text-align:center;cursor:pointer;
+transition:all .2s;position:relative;
+}
+#uz:hover,#uz.drag{border-color:var(–green);background:rgba(0,229,160,.03)}
+#uz input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.uz-icon{font-size:22px;margin-bottom:8px}
+.uz-text{font-size:11px;color:var(–text2);line-height:1.7}
+.uz-text strong{color:var(–text)}
+#uz-name{
+margin-top:8px;font-family:var(–mono);font-size:10px;
+color:var(–green);display:none;
+}
+.btn-preview{
+margin-top:8px;width:100%;
+background:transparent;border:1px solid var(–border2);
+color:var(–text2);border-radius:6px;padding:8px;
+font-family:var(–mono);font-size:10px;cursor:pointer;
+letter-spacing:.06em;transition:all .2s;display:none;
+}
+.btn-preview:hover{border-color:var(–blue);color:var(–blue);background:var(–blue2)}
+
+/* Quick add */
+.qa-row{display:flex;gap:8px}
+.qa-inp{
+flex:1;background:var(–s2);border:1px solid var(–border);
+border-radius:6px;padding:9px 10px;
+font-family:var(–mono);font-size:11px;color:var(–text);outline:none;
+transition:border-color .2s;
+}
+.qa-inp:focus{border-color:var(–green)}
+.qa-inp::placeholder{color:var(–text3)}
+.btn-add{
+padding:9px 14px;background:var(–green);border:none;
+color:#000;border-radius:6px;font-family:var(–mono);
+font-size:11px;cursor:pointer;font-weight:600;transition:opacity .2s;
+}
+.btn-add:hover{opacity:.85}
+
+/* ════ MAIN ════ */
+#main{
+flex:1;display:flex;flex-direction:column;
+transition:margin-left var(–spd) cubic-bezier(.16,1,.3,1);
+min-width:0;
+}
+#main.shifted{margin-left:var(–pw)}
+
+/* Topbar */
+#top{
+height:52px;flex-shrink:0;
+border-bottom:1px solid var(–border);
+display:flex;align-items:center;padding:0 24px;gap:16px;
+background:var(–s1);position:relative;z-index:10;
+}
+.logo{
+font-family:var(–mono);font-size:15px;font-weight:600;
+color:var(–green);letter-spacing:.08em;
+display:flex;align-items:center;gap:10px;
+}
+.logo-pulse{
+width:7px;height:7px;border-radius:50%;
+background:var(–green);
+box-shadow:0 0 8px var(–green);
+animation:blink 2.5s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 8px var(–green)}50%{opacity:.25;box-shadow:none}}
+
+.t-sep{width:1px;height:24px;background:var(–border);margin:0 4px}
+.t-sp{flex:1}
+
+.t-chip{
+font-family:var(–mono);font-size:9px;letter-spacing:.1em;
+padding:4px 10px;border-radius:3px;
+border:1px solid var(–border2);color:var(–text3);
+text-transform:uppercase;
+}
+.t-chip.on{border-color:rgba(0,229,160,.3);color:var(–green);background:rgba(0,229,160,.06)}
+
+/* Mode switcher */
+.mode-sw{
+display:flex;background:var(–s2);border:1px solid var(–border);
+border-radius:6px;padding:3px;gap:2px;
+}
+.mode-btn{
+padding:5px 14px;border-radius:4px;font-family:var(–mono);
+font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+cursor:pointer;border:none;background:transparent;
+color:var(–text3);transition:all .2s;
+}
+.mode-btn.active{
+background:var(–s3);color:var(–text);
+border:1px solid var(–border2);
+}
+
+/* ════ CONTENT ════ */
+#content{
+flex:1;display:flex;min-height:0;
+gap:1px;background:var(–border);
+}
+
+/* Panes */
+.pane{
+background:var(–s1);display:flex;
+flex-direction:column;overflow:hidden;
+}
+.pane-hd{
+padding:14px 18px 12px;border-bottom:1px solid var(–border);
+flex-shrink:0;display:flex;align-items:center;gap:10px;
+}
+.pane-tag{
+font-family:var(–mono);font-size:9px;letter-spacing:.14em;
+text-transform:uppercase;color:var(–text3);
+}
+.pane-title{
+font-size:12px;font-weight:500;color:var(–text);
+}
+.pane-badge{
+font-family:var(–mono);font-size:9px;padding:2px 8px;
+border-radius:2px;background:var(–s3);color:var(–text2);
+border:1px solid var(–border);margin-left:auto;
+}
+.pane-badge.g{background:rgba(0,229,160,.08);color:var(–green);border-color:rgba(0,229,160,.2)}
+
+/* ════ MODE A: UPDATE (voice/text) ════ */
+#mode-update{flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* Voice hero */
+#voice-hero{
+padding:20px 18px;border-bottom:1px solid var(–border);flex-shrink:0;
+}
+.vh-label{
+font-family:var(–mono);font-size:9px;letter-spacing:.14em;
+text-transform:uppercase;color:var(–text3);margin-bottom:12px;
+}
+.vh-row{display:flex;gap:10px;align-items:stretch}
+#vtxt{
+flex:1;background:var(–s2);border:1px solid var(–border2);
+border-radius:7px;padding:11px 14px;
+font-family:var(–mono);font-size:12px;color:var(–text);
+outline:none;transition:border-color .2s;
+}
+#vtxt:focus{border-color:var(–green)}
+#vtxt::placeholder{color:var(–text3);font-style:italic}
+#btn-mic{
+width:44px;flex-shrink:0;border-radius:7px;
+background:var(–s2);border:1px solid var(–border2);
+color:var(–text3);cursor:pointer;
+display:flex;align-items:center;justify-content:center;
+transition:all .25s;
+}
+#btn-mic:hover{border-color:var(–amber);color:var(–amber)}
+#btn-mic.on{
+background:rgba(255,71,87,.1);border-color:var(–red);color:var(–red);
+animation:rp 1.2s ease-in-out infinite;
+}
+@keyframes rp{
+0%,100%{box-shadow:0 0 0 0 rgba(255,71,87,.4)}
+50%{box-shadow:0 0 0 6px rgba(255,71,87,0)}
+}
+#btn-go{
+padding:0 18px;background:var(–green);border:none;color:#000;
+border-radius:7px;font-family:var(–mono);font-size:10px;
+font-weight:600;cursor:pointer;letter-spacing:.08em;
+transition:opacity .2s;flex-shrink:0;
+}
+#btn-go:hover{opacity:.85}
+
+/* Status line */
+#vstat{
+margin-top:10px;
+font-family:var(–mono);font-size:10px;color:var(–text3);
+padding:7px 10px;background:var(–s2);border-radius:5px;
+border-left:2px solid var(–border2);
+transition:border-color .3s,color .3s;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#vstat.a{border-color:var(–green);color:var(–green)}
+#vstat.e{border-color:var(–red);color:var(–red)}
+#vstat.w{border-color:var(–amber);color:var(–amber)}
+
+/* Recent chips */
+#chips-wrap{
+padding:14px 18px;border-bottom:1px solid var(–border);
+flex-shrink:0;
+}
+.chips-label{
+font-family:var(–mono);font-size:9px;letter-spacing:.12em;
+text-transform:uppercase;color:var(–text3);margin-bottom:9px;
+}
+#chips{display:flex;flex-wrap:wrap;gap:7px;min-height:28px}
+.chip{
+display:flex;align-items:center;gap:5px;
+padding:4px 9px;border-radius:3px;
+font-family:var(–mono);font-size:10px;
+border:1px solid transparent;
+animation:cpin .2s ease;
+}
+@keyframes cpin{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.chip.v{background:rgba(0,229,160,.07);border-color:rgba(0,229,160,.25);color:var(–green)}
+.chip.i{background:rgba(255,71,87,.07);border-color:rgba(255,71,87,.25);color:var(–red)}
+.chip-x{cursor:pointer;opacity:.5;transition:opacity .15s;font-size:12px}
+.chip-x:hover{opacity:1}
+
+/* Holdings table */
+#tbl-wrap{flex:1;overflow:auto;scrollbar-width:thin;scrollbar-color:var(–border2) transparent}
+table{width:100%;border-collapse:collapse}
+thead th{
+position:sticky;top:0;background:var(–s2);
+font-family:var(–mono);font-size:9px;letter-spacing:.1em;
+text-transform:uppercase;color:var(–text3);
+padding:9px 14px;text-align:left;
+border-bottom:1px solid var(–border);font-weight:400;
+}
+tbody tr{border-bottom:1px solid rgba(26,37,53,.6);transition:background .15s}
+tbody tr:hover{background:rgba(255,255,255,.015)}
+td{padding:9px 14px;font-size:12px}
+td.mono{font-family:var(–mono);font-size:11px}
+.sym-v{color:var(–green)}
+.sym-i{color:var(–red)}
+.sym-p{color:var(–amber)}
+.tag-sm{
+display:inline-block;padding:2px 6px;border-radius:2px;
+font-family:var(–mono);font-size:9px;letter-spacing:.04em;
+}
+.tag-v{background:rgba(0,229,160,.08);color:var(–green)}
+.tag-i{background:rgba(255,71,87,.08);color:var(–red)}
+.tag-p{background:rgba(245,166,35,.08);color:var(–amber)}
+.rm-btn{
+cursor:pointer;color:var(–text3);font-size:14px;
+transition:color .15s;user-select:none;
+}
+.rm-btn:hover{color:var(–red)}
+
+.empty-st{
+padding:60px 24px;text-align:center;color:var(–text3);
+}
+.empty-st svg{opacity:.15;margin-bottom:14px}
+.empty-st p{font-size:12px;line-height:1.8;font-family:var(–mono)}
+
+/* ════ MODE B: ONBOARD (image analysis) ════ */
+#mode-onboard{flex:1;display:flex;min-height:0}
+
+/* Drop zone — left */
+#drop-zone{
+width:320px;flex-shrink:0;
+border-right:1px solid var(–border);
+display:flex;flex-direction:column;
+align-items:center;justify-content:center;
+padding:32px 24px;text-align:center;
+cursor:pointer;transition:background .2s;
+position:relative;
+}
+#drop-zone:hover,#drop-zone.drag{background:rgba(0,229,160,.025)}
+#drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+#drop-zone.has-img{cursor:default}
+
+.dz-ring{
+width:100px;height:100px;border-radius:50%;
+border:1.5px dashed var(–border2);
+display:flex;align-items:center;justify-content:center;
+margin-bottom:20px;transition:border-color .3s;
+position:relative;
+}
+#drop-zone:hover .dz-ring,#drop-zone.drag .dz-ring{border-color:var(–green)}
+.dz-ring svg{color:var(–text3);transition:color .3s}
+#drop-zone:hover .dz-ring svg{color:var(–green)}
+
+.dz-title{
+font-family:var(–mono);font-size:12px;font-weight:600;
+color:var(–text);margin-bottom:6px;letter-spacing:.04em;
+}
+.dz-sub{font-size:11px;color:var(–text2);line-height:1.7}
+.dz-sub strong{color:var(–text)}
+
+#img-preview-box{
+width:100%;flex:1;min-height:0;
+display:none;flex-direction:column;gap:12px;
+}
+#img-thumb{
+flex:1;min-height:0;
+border-radius:8px;overflow:hidden;
+border:1px solid var(–border2);position:relative;
+background:var(–s2);
+}
+#img-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+#img-fname{
+font-family:var(–mono);font-size:10px;color:var(–text2);
+padding:8px 10px;background:var(–s2);border-radius:5px;
+border:1px solid var(–border);word-break:break-all;
+text-align:left;
+}
+#btn-analyse{
+width:100%;padding:12px;
+background:linear-gradient(135deg,rgba(0,229,160,.15),rgba(56,182,255,.1));
+border:1px solid var(–green);color:var(–green);
+border-radius:7px;font-family:var(–mono);font-size:10px;
+cursor:pointer;letter-spacing:.1em;font-weight:600;
+transition:all .25s;text-transform:uppercase;
+}
+#btn-analyse:hover{background:linear-gradient(135deg,rgba(0,229,160,.25),rgba(56,182,255,.18))}
+#btn-analyse:disabled{opacity:.4;cursor:default}
+
+/* Analysis panel — right */
+#analysis-panel{
+flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;
+}
+
+#ap-idle{
+flex:1;display:flex;flex-direction:column;
+align-items:center;justify-content:center;
+padding:40px;text-align:center;color:var(–text3);
+}
+.ap-idle-ring{
+width:80px;height:80px;border-radius:50%;
+border:1px solid var(–border2);
+display:flex;align-items:center;justify-content:center;
+margin-bottom:18px;
+}
+.ap-idle-ring svg{opacity:.25}
+#ap-idle p{font-family:var(–mono);font-size:11px;line-height:1.9;color:var(–text3)}
+
+#ap-loading{
+flex:1;display:none;flex-direction:column;
+align-items:center;justify-content:center;gap:20px;
+}
+.ap-spinner{
+width:48px;height:48px;border-radius:50%;
+border:1.5px solid var(–border2);
+border-top-color:var(–green);
+animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ap-loading-txt{
+font-family:var(–mono);font-size:10px;color:var(–green);
+letter-spacing:.12em;text-transform:uppercase;
+}
+.ap-loading-sub{font-family:var(–mono);font-size:9px;color:var(–text3);
+letter-spacing:.08em;text-transform:uppercase;margin-top:-12px;
+}
+
+#ap-result{
+flex:1;min-height:0;display:none;flex-direction:column;overflow:hidden;
+}
+
+/* Result sections */
+.ar-section{
+padding:14px 18px;border-bottom:1px solid var(–border);flex-shrink:0;
+}
+.ar-label{
+font-family:var(–mono);font-size:9px;letter-spacing:.14em;
+text-transform:uppercase;color:var(–text3);margin-bottom:10px;
+}
+
+/* Sector bars */
+#sector-bars{display:flex;flex-direction:column;gap:7px}
+.sb-row{display:flex;align-items:center;gap:10px}
+.sb-name{
+font-family:var(–mono);font-size:9px;color:var(–text2);
+width:90px;flex-shrink:0;text-align:right;
+}
+.sb-track{
+flex:1;height:4px;background:var(–s3);border-radius:2px;overflow:hidden;
+}
+.sb-fill{
+height:100%;background:var(–green);border-radius:2px;
+transition:width .6s cubic-bezier(.22,1,.36,1);
+}
+.sb-pct{
+font-family:var(–mono);font-size:9px;color:var(–text3);
+width:30px;text-align:right;
+}
+
+/* Extracted stock list */
+#extracted-list{
+flex:1;overflow-y:auto;
+scrollbar-width:thin;scrollbar-color:var(–border2) transparent;
+}
+.ex-item{
+display:flex;align-items:center;padding:9px 18px;
+border-bottom:1px solid rgba(26,37,53,.5);gap:12px;
+transition:background .15s;
+}
+.ex-item:hover{background:rgba(255,255,255,.015)}
+.ex-sym{
+font-family:var(–mono);font-size:11px;font-weight:600;
+color:var(–green);width:110px;flex-shrink:0;
+}
+.ex-sym.unk{color:var(–amber)}
+.ex-name{font-size:11px;color:var(–text2);flex:1;min-width:0;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-sec{font-family:var(–mono);font-size:9px;color:var(–text3)}
+.ex-check{
+width:18px;height:18px;border-radius:3px;
+border:1px solid var(–border2);
+cursor:pointer;display:flex;align-items:center;justify-content:center;
+transition:all .15s;flex-shrink:0;
+}
+.ex-check.on{background:rgba(0,229,160,.12);border-color:var(–green)}
+
+/* Import btn */
+#ap-footer{
+padding:14px 18px;border-top:1px solid var(–border);
+display:none;align-items:center;gap:12px;flex-shrink:0;
+}
+#ap-summary{font-family:var(–mono);font-size:10px;color:var(–text2);flex:1}
+#btn-import{
+padding:10px 20px;background:var(–green);
+border:none;color:#000;border-radius:6px;
+font-family:var(–mono);font-size:10px;font-weight:700;
+cursor:pointer;letter-spacing:.08em;transition:opacity .2s;
+}
+#btn-import:hover{opacity:.85}
+.btn-clean{
+padding:10px 14px;background:transparent;
+border:1px solid var(–border2);color:var(–text2);
+border-radius:6px;font-family:var(–mono);font-size:10px;
+cursor:pointer;letter-spacing:.06em;transition:all .2s;
+}
+.btn-clean:hover{border-color:var(–red);color:var(–red)}
+
+/* Observations */
+#obs-list{display:flex;flex-direction:column;gap:6px}
+.obs{
+display:flex;align-items:flex-start;gap:8px;
+font-family:var(–mono);font-size:10px;color:var(–text2);
+padding:6px 10px;background:var(–s2);border-radius:4px;
+border-left:2px solid var(–border2);line-height:1.5;
+}
+.obs.w{border-color:var(–amber);color:var(–amber)}
+.obs.g{border-color:var(–green);color:var(–green)}
+.obs.n{border-color:var(–blue);color:var(–blue)}
+
+/* ════ MODAL ════ */
+#modal-bg{
+position:fixed;inset:0;background:rgba(0,0,0,.75);
+z-index:200;display:none;align-items:center;justify-content:center;
+backdrop-filter:blur(6px);
+}
+#modal-bg.on{display:flex}
+#modal{
+background:var(–s1);border:1px solid var(–border2);
+border-radius:10px;width:min(92vw,780px);max-height:82vh;
+display:flex;flex-direction:column;
+box-shadow:0 40px 100px rgba(0,0,0,.7);
+animation:min .3s cubic-bezier(.16,1,.3,1);
+}
+@keyframes min{from{opacity:0;transform:scale(.93) translateY(14px)}}
+.modal-hd{
+padding:18px 22px 15px;border-bottom:1px solid var(–border);
+display:flex;align-items:center;gap:12px;
+}
+.modal-hd h3{font-family:var(–mono);font-size:11px;color:var(–text);flex:1}
+.modal-close{
+width:26px;height:26px;border-radius:5px;
+background:var(–s2);border:1px solid var(–border);
+color:var(–text2);cursor:pointer;font-size:14px;
+display:flex;align-items:center;justify-content:center;
+transition:all .15s;
+}
+.modal-close:hover{background:var(–s3);color:var(–text)}
+.modal-body{flex:1;overflow:auto;padding:18px 22px}
+
+/* Toast */
+#toast{
+position:fixed;bottom:24px;right:24px;z-index:9000;
+font-family:var(–mono);font-size:11px;
+padding:10px 16px;border-radius:6px;
+background:var(–s2);border:1px solid var(–border2);
+color:var(–text);box-shadow:0 8px 30px rgba(0,0,0,.5);
+transform:translateY(12px);opacity:0;
+transition:all .25s;pointer-events:none;max-width:300px;
+}
+#toast.on{transform:translateY(0);opacity:1}
+#toast.g{border-color:rgba(0,229,160,.4);color:var(–green)}
+#toast.a{border-color:rgba(245,166,35,.4);color:var(–amber)}
+#toast.r{border-color:rgba(255,71,87,.4);color:var(–red)}
+</style>
+
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SLIDE PANEL
+═══════════════════════════════════════ -->
+
+<div id="panel">
+  <div class="ph">
+    <div class="ph-tag">// Control Panel</div>
+    <h2>System Settings</h2>
+    <p>Harvest · Symbols · Import</p>
+  </div>
+  <div class="pb">
+
+```
+<div class="ps">
+  <div class="ps-label">Harvest Config</div>
+  <div class="tr">
+    <div><div class="tl">Auto-Harvest</div><div class="ts">Daily 18:30 UTC</div></div>
+    <label class="tog"><input type="checkbox" checked id="tog-auto"><div class="tog-tr"></div><div class="tog-th"></div></label>
+  </div>
+  <div class="tr">
+    <div><div class="tl">Symbol Auto-Verify</div><div class="ts">Validate on entry</div></div>
+    <label class="tog"><input type="checkbox" checked id="tog-av"><div class="tog-tr"></div><div class="tog-th"></div></label>
+  </div>
+  <div class="tr">
+    <div><div class="tl">Voice Input</div><div class="ts">Mic-based entry</div></div>
+    <label class="tog"><input type="checkbox" checked id="tog-voice"><div class="tog-tr"></div><div class="tog-th"></div></label>
+  </div>
+  <div class="tr">
+    <div><div class="tl">Image OCR</div><div class="ts">AI portfolio scan</div></div>
+    <label class="tog"><input type="checkbox" checked id="tog-ocr"><div class="tog-tr"></div><div class="tog-th"></div></label>
+  </div>
+</div>
+
+<div class="ps">
+  <div class="ps-label">Holdings File</div>
+  <div id="uz">
+    <input type="file" id="f-inp" accept=".xlsx,.xls,.csv">
+    <div class="uz-icon">▤</div>
+    <div class="uz-text"><strong>Click or drag</strong> to upload<br>.xlsx · .xls · .csv</div>
+    <div id="uz-name"></div>
+  </div>
+  <button class="btn-preview" id="btn-fp">⊞ Preview Contents</button>
+</div>
+
+<div class="ps">
+  <div class="ps-label">Quick Add</div>
+  <div class="qa-row">
+    <input class="qa-inp" id="qa-sym" placeholder="HDFCBANK" onkeydown="if(event.key==='Enter')quickAdd()">
+    <button class="btn-add" onclick="quickAdd()">ADD</button>
+  </div>
+</div>
+
+<div class="ps">
+  <div class="ps-label">Actions</div>
+  <div style="display:flex;flex-direction:column;gap:7px">
+    <button onclick="cleanInvalid()" style="width:100%;padding:9px;background:rgba(255,71,87,.07);
+      border:1px solid rgba(255,71,87,.25);color:var(--red);border-radius:6px;
+      font-family:var(--mono);font-size:10px;cursor:pointer;letter-spacing:.06em;
+      transition:background .2s" onmouseover="this.style.background='rgba(255,71,87,.14)'"
+      onmouseout="this.style.background='rgba(255,71,87,.07)'">
+      ✕ Remove Unknown Symbols
+    </button>
+    <button onclick="holdings=[];renderAll();toast('Holdings cleared','a')" style="width:100%;padding:9px;background:var(--s2);
+      border:1px solid var(--border);color:var(--text2);border-radius:6px;
+      font-family:var(--mono);font-size:10px;cursor:pointer;letter-spacing:.06em;
+      transition:all .2s" onmouseover="this.style.borderColor='var(--border2)'"
+      onmouseout="this.style.borderColor='var(--border)'">
+      ⟳ Clear All Holdings
+    </button>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<div id="ptab" onclick="togglePanel()">
+  <svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+    <path d="M1 1l6 6-6 6"/>
+  </svg>
+</div>
+
+<!-- ═══════════════════════════════════════
+     MAIN
+═══════════════════════════════════════ -->
+
+<div id="main">
+  <div id="top">
+    <div class="logo">
+      <div class="logo-pulse"></div>
+      AVITO
+    </div>
+    <div class="t-sep"></div>
+    <span style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em">PORTFOLIO INTELLIGENCE</span>
+    <div class="t-sp"></div>
+
+```
+<!-- Mode switcher -->
+<div class="mode-sw">
+  <button class="mode-btn active" id="btn-mode-u" onclick="setMode('update')">
+    ◎ Update Holdings
+  </button>
+  <button class="mode-btn" id="btn-mode-o" onclick="setMode('onboard')">
+    ⊕ New Customer Scan
+  </button>
+</div>
+
+<div class="t-sep"></div>
+<div class="t-chip on" id="clk">--:-- IST</div>
+<div class="t-chip" id="stk-chip">0 stocks</div>
+```
+
+  </div>
+
+  <div id="content">
+
+```
+<!-- LEFT: holdings pane (always visible) -->
+<div class="pane" style="width:340px;flex-shrink:0;border-right:1px solid var(--border)">
+  <div class="pane-hd">
+    <div>
+      <div class="pane-tag">// Holdings</div>
+      <div class="pane-title">Verified Portfolio</div>
+    </div>
+    <div class="pane-badge g" id="h-badge">0 stocks</div>
+  </div>
+  <div id="tbl-wrap">
+    <div class="empty-st" id="tbl-empty">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M3 3h18v4H3zM3 10h18v4H3zM3 17h18v4H3z"/></svg>
+      <p>No holdings yet.<br>Update or scan to begin.</p>
+    </div>
+    <table id="htbl" style="display:none">
+      <thead><tr>
+        <th>#</th><th>Symbol</th><th>Name</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody id="htbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- RIGHT: mode area -->
+<div class="pane" style="flex:1;min-width:0">
+
+  <!-- MODE A: UPDATE -->
+  <div id="mode-update" style="display:flex">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+
+      <div class="pane-hd">
+        <div>
+          <div class="pane-tag">// Existing User</div>
+          <div class="pane-title">Update Holdings</div>
+        </div>
+        <div class="pane-badge" id="v-badge">0 verified</div>
+      </div>
+
+      <div id="voice-hero">
+        <div class="vh-label">// Voice or Type — comma-separated symbols</div>
+        <div class="vh-row">
+          <input id="vtxt" type="text"
+            placeholder="Speak or type: HDFCBANK, TCS, RELIANCE ..."
+            onkeydown="if(event.key==='Enter')doVerify()">
+          <button id="btn-mic" title="Click to speak" onclick="toggleMic()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/>
+            </svg>
+          </button>
+          <button id="btn-go" onclick="doVerify()">VERIFY</button>
+        </div>
+        <div id="vstat">// ready — enter stock symbols above</div>
+      </div>
+
+      <div id="chips-wrap">
+        <div class="chips-label">// Recent additions</div>
+        <div id="chips"><span style="font-family:var(--mono);font-size:10px;color:var(--text3)">None yet</span></div>
+      </div>
+
+      <!-- Voice tips -->
+      <div style="padding:16px 18px;flex:1">
+        <div class="vh-label" style="margin-bottom:12px">// Voice tips for Indian markets</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="padding:10px;background:var(--s2);border-radius:5px;border:1px solid var(--border)">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--green);margin-bottom:5px">SAY</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text);line-height:1.9">
+              "HDFC Bank"<br>"Reliance"<br>"Infosys, TCS"<br>"Bajaj Finance"
+            </div>
+          </div>
+          <div style="padding:10px;background:var(--s2);border-radius:5px;border:1px solid var(--border)">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:5px">MAPS TO</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--amber);line-height:1.9">
+              HDFCBANK<br>RELIANCE<br>INFY, TCS<br>BAJFINANCE
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODE B: ONBOARD -->
+  <div id="mode-onboard" style="display:none">
+    <div id="drop-zone" onclick="document.getElementById('img-inp').click()">
+      <input type="file" id="img-inp" accept="image/*" style="display:none">
+      <div class="dz-ring">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+      </div>
+      <div class="dz-title">Drop Portfolio Screenshot</div>
+      <div class="dz-sub">
+        Broker app · Statement · Watchlist<br>
+        <strong>Any image with stock names</strong>
+      </div>
+    </div>
+
+    <!-- image preview replaces drop zone content -->
+    <div id="img-preview-box">
+      <div id="img-thumb"></div>
+      <div id="img-fname"></div>
+      <button id="btn-analyse" onclick="runAnalysis()">⟳ ANALYSE PORTFOLIO</button>
+    </div>
+
+    <div id="analysis-panel">
+      <div id="ap-idle">
+        <div class="ap-idle-ring">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v3M11 14h.01"/>
+          </svg>
+        </div>
+        <p>Upload a portfolio screenshot<br>to begin AI analysis.<br><br>
+        Works with Zerodha · Groww<br>Angel One · Kite · any broker</p>
+      </div>
+      <div id="ap-loading">
+        <div class="ap-spinner"></div>
+        <div class="ap-loading-txt">Analysing Portfolio</div>
+        <div class="ap-loading-sub">Extracting symbols · Identifying stocks</div>
+      </div>
+      <div id="ap-result">
+        <div class="ar-section" id="ar-sector">
+          <div class="ar-label">// Portfolio Composition</div>
+          <div id="sector-bars"></div>
+        </div>
+        <div class="ar-section" id="ar-obs">
+          <div class="ar-label">// Observations</div>
+          <div id="obs-list"></div>
+        </div>
+        <div id="extracted-list"></div>
+      </div>
+      <div id="ap-footer">
+        <div id="ap-summary"></div>
+        <button class="btn-clean" onclick="clearExtracted()">Clear</button>
+        <button id="btn-import" onclick="importExtracted()">IMPORT ALL</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+```
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ MODAL ═══════════════════════════════════════ -->
+
+<div id="modal-bg">
+  <div id="modal">
+    <div class="modal-hd">
+      <h3 id="modal-ttl">Preview</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// NSE MASTER — symbol → {name, sector}
+// ══════════════════════════════════════════
+const NSE = {
+  HDFCBANK:{n:"HDFC Bank",s:"Banking"},ICICIBANK:{n:"ICICI Bank",s:"Banking"},
+  KOTAKBANK:{n:"Kotak Mahindra Bank",s:"Banking"},AXISBANK:{n:"Axis Bank",s:"Banking"},
+  SBIN:{n:"State Bank of India",s:"Banking"},INDUSINDBK:{n:"IndusInd Bank",s:"Banking"},
+  AUBANK:{n:"AU Small Finance Bank",s:"Banking"},
+  BAJFINANCE:{n:"Bajaj Finance",s:"NBFC"},BAJAJFINSV:{n:"Bajaj Finserv",s:"NBFC"},
+  SPANDANA:{n:"Spandana Sphoorty",s:"NBFC"},JIOFIN:{n:"Jio Financial Services",s:"Finance"},
+  PFC:{n:"Power Finance Corporation",s:"Finance"},RECLTD:{n:"REC Limited",s:"Finance"},
+  IREDA:{n:"Indian Renewable Energy Dev",s:"Finance"},CAMS:{n:"CAMS",s:"Finance"},
+  HDFCLIFE:{n:"HDFC Life",s:"Insurance"},SBILIFE:{n:"SBI Life",s:"Insurance"},
+  TCS:{n:"Tata Consultancy Services",s:"IT"},INFY:{n:"Infosys",s:"IT"},
+  HCLTECH:{n:"HCL Technologies",s:"IT"},WIPRO:{n:"Wipro",s:"IT"},
+  TECHM:{n:"Tech Mahindra",s:"IT"},LTIM:{n:"LTIMindtree",s:"IT"},
+  TATATECH:{n:"Tata Technologies",s:"IT"},
+  RELIANCE:{n:"Reliance Industries",s:"Energy"},ONGC:{n:"ONGC",s:"Energy"},
+  BPCL:{n:"BPCL",s:"Energy"},ADANIGREEN:{n:"Adani Green Energy",s:"Energy"},
+  COALINDIA:{n:"Coal India",s:"Mining"},NMDC:{n:"NMDC Limited",s:"Mining"},
+  HINDCOPPER:{n:"Hindustan Copper",s:"Metals"},SANDUMA:{n:"Sandur Manganese",s:"Metals"},
+  HEG:{n:"HEG Limited",s:"Industrials"},
+  POWERGRID:{n:"Power Grid Corporation",s:"Utilities"},NTPC:{n:"NTPC",s:"Utilities"},
+  HINDUNILVR:{n:"Hindustan Unilever",s:"FMCG"},ITC:{n:"ITC Limited",s:"FMCG"},
+  NESTLEIND:{n:"Nestle India",s:"FMCG"},BRITANNIA:{n:"Britannia Industries",s:"FMCG"},
+  TATACONSUM:{n:"Tata Consumer",s:"FMCG"},
+  TITAN:{n:"Titan Company",s:"Consumer"},ASIANPAINT:{n:"Asian Paints",s:"Consumer"},
+  ZOMATO:{n:"Zomato",s:"Consumer"},DELHIVERY:{n:"Delhivery",s:"Logistics"},
+  MARUTI:{n:"Maruti Suzuki",s:"Auto"},"BAJAJ-AUTO":{n:"Bajaj Auto",s:"Auto"},
+  HEROMOTOCO:{n:"Hero MotoCorp",s:"Auto"},EICHERMOT:{n:"Eicher Motors",s:"Auto"},
+  "M&M":{n:"Mahindra & Mahindra",s:"Auto"},TATAMOTORS:{n:"Tata Motors",s:"Auto"},
+  BHARATFORG:{n:"Bharat Forge",s:"Auto"},
+  SUNPHARMA:{n:"Sun Pharmaceutical",s:"Pharma"},DRREDDY:{n:"Dr. Reddy's",s:"Pharma"},
+  CIPLA:{n:"Cipla",s:"Pharma"},DIVISLAB:{n:"Divi's Labs",s:"Pharma"},
+  LAURUSLABS:{n:"Laurus Labs",s:"Pharma"},APOLLOHOSP:{n:"Apollo Hospitals",s:"Healthcare"},
+  TATASTEEL:{n:"Tata Steel",s:"Metals"},JSWSTEEL:{n:"JSW Steel",s:"Metals"},
+  HINDALCO:{n:"Hindalco Industries",s:"Metals"},NATIONALUM:{n:"National Aluminium",s:"Metals"},
+  ADANIENT:{n:"Adani Enterprises",s:"Conglomerate"},LT:{n:"Larsen & Toubro",s:"Infrastructure"},
+  ADANIPORTS:{n:"Adani Ports",s:"Infrastructure"},RVNL:{n:"Rail Vikas Nigam",s:"Infrastructure"},
+  ENGINERSIN:{n:"Engineers India",s:"Engineering"},BHEL:{n:"Bharat Heavy Electricals",s:"Engineering"},
+  TRITURBINE:{n:"Triveni Turbine",s:"Engineering"},GPPL:{n:"Gujarat Pipavav Port",s:"Infrastructure"},
+  ULTRACEMCO:{n:"UltraTech Cement",s:"Cement"},GRASIM:{n:"Grasim Industries",s:"Cement"},
+  BHARTIARTL:{n:"Bharti Airtel",s:"Telecom"},IRCTC:{n:"Indian Railway Catering",s:"Travel"},
+  HAL:{n:"Hindustan Aeronautics",s:"Defence"},MAZDOCK:{n:"Mazagon Dock",s:"Defence"},
+  BDL:{n:"Bharat Dynamics",s:"Defence"},ZENTEC:{n:"Zen Technologies",s:"Defence"},
+  PARAS:{n:"Paras Defence",s:"Defence"},
+};
+
+// Fuzzy name→symbol map for voice
+const NAME_MAP = {
+  "hdfc bank":"HDFCBANK","hdfc":"HDFCBANK","icici bank":"ICICIBANK","icici":"ICICIBANK",
+  "kotak":"KOTAKBANK","kotak bank":"KOTAKBANK","sbi":"SBIN","state bank":"SBIN",
+  "axis bank":"AXISBANK","bajaj finance":"BAJFINANCE","bajaj finserv":"BAJAJFINSV",
+  "infosys":"INFY","reliance":"RELIANCE","tcs":"TCS","tata consultancy":"TCS",
+  "wipro":"WIPRO","hcl":"HCLTECH","tech mahindra":"TECHM","maruti":"MARUTI",
+  "tata steel":"TATASTEEL","tata motors":"TATAMOTORS","hdfc life":"HDFCLIFE",
+  "sun pharma":"SUNPHARMA","sun pharma":"SUNPHARMA","bharti airtel":"BHARTIARTL",
+  "airtel":"BHARTIARTL","ntpc":"NTPC","power grid":"POWERGRID","ongc":"ONGC",
+  "coal india":"COALINDIA","itc":"ITC","titan":"TITAN","asian paints":"ASIANPAINT",
+  "hindustan unilever":"HINDUNILVR","hul":"HINDUNILVR","nestle":"NESTLEIND",
+  "britannia":"BRITANNIA","apollo hospitals":"APOLLOHOSP","apollo":"APOLLOHOSP",
+  "dr reddy":"DRREDDY","dr reddys":"DRREDDY","cipla":"CIPLA","zomato":"ZOMATO",
+  "adani enterprises":"ADANIENT","adani ports":"ADANIPORTS","adani green":"ADANIGREEN",
+  "larsen":"LT","l&t":"LT","jsw steel":"JSWSTEEL","hindalco":"HINDALCO",
+  "hal":"HAL","hindustan aeronautics":"HAL","bajaj auto":"BAJAJ-AUTO",
+  "hero motocorp":"HEROMOTOCO","hero":"HEROMOTOCO","mahindra":"M&M",
+  "eicher":"EICHERMOT","grasim":"GRASIM","ultratech":"ULTRACEMCO",
+  "nmdc":"NMDC","irctc":"IRCTC","jio financial":"JIOFIN","jio":"JIOFIN",
+  "rvnl":"RVNL","bhel":"BHEL","pfc":"PFC","rec":"RECLTD",
+};
+
+function resolveSymbol(raw) {
+  const clean = raw.trim().toUpperCase().replace(/[.\s]+/g,'');
+  if (NSE[clean]) return { sym: clean, ...NSE[clean], status: 'v' };
+  // try fuzzy name map
+  const lc = raw.trim().toLowerCase();
+  const mapped = NAME_MAP[lc];
+  if (mapped && NSE[mapped]) return { sym: mapped, ...NSE[mapped], status: 'v' };
+  // partial name search
+  for (const [k,v] of Object.entries(NAME_MAP)) {
+    if (lc.includes(k) || k.includes(lc)) {
+      if (NSE[v]) return { sym: v, ...NSE[v], status: 'v' };
+    }
+  }
+  return { sym: clean || raw.trim().toUpperCase(), n: raw.trim(), s: 'Unknown', status: 'i' };
+}
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let holdings = [];
+let extractedStocks = [];
+let extractedChecked = new Set();
+let panelOpen = false;
+let mode = 'update';
+let isListening = false;
+let recognition = null;
+let uploadedFile = null;
+let uploadedImgB64 = null;
+let uploadedImgType = null;
+
+// ══════════════════════════════════════════
+// PANEL
+// ══════════════════════════════════════════
+function togglePanel() {
+  panelOpen = !panelOpen;
+  document.getElementById('panel').classList.toggle('open', panelOpen);
+  document.getElementById('ptab').classList.toggle('shifted', panelOpen);
+  document.getElementById('main').classList.toggle('shifted', panelOpen);
+}
+document.addEventListener('click', e => {
+  if (!panelOpen) return;
+  const p = document.getElementById('panel'), t = document.getElementById('ptab');
+  if (!p.contains(e.target) && !t.contains(e.target)) togglePanel();
+});
+
+// ══════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════
+function tick() {
+  const s = new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  document.getElementById('clk').textContent = s + ' IST';
+}
+setInterval(tick,1000); tick();
+
+// ══════════════════════════════════════════
+// MODE SWITCH
+// ══════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-update').style.display = m === 'update' ? 'flex' : 'none';
+  document.getElementById('mode-onboard').style.display = m === 'onboard' ? 'flex' : 'none';
+  document.getElementById('btn-mode-u').classList.toggle('active', m === 'update');
+  document.getElementById('btn-mode-o').classList.toggle('active', m === 'onboard');
+}
+
+// ══════════════════════════════════════════
+// VOICE
+// ══════════════════════════════════════════
+function toggleMic() {
+  if (!document.getElementById('tog-voice').checked) {
+    toast('Enable voice in settings ⚙', 'a'); return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { setVstat('Speech recognition unavailable — use Chrome', 'e'); return; }
+
+  if (isListening) { recognition?.stop(); return; }
+
+  recognition = new SR();
+  recognition.lang = 'en-IN';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onstart = () => {
+    isListening = true;
+    document.getElementById('btn-mic').classList.add('on');
+    setVstat('🎤 Listening… speak stock names or symbols', 'a');
+  };
+  recognition.onresult = e => {
+    const t = [...e.results].map(r=>r[0].transcript).join('');
+    document.getElementById('vtxt').value = t;
+    if (e.results[0].isFinal) setVstat(`Heard: "${t}" — press VERIFY`, 'a');
+  };
+  recognition.onerror = e => { setVstat('Mic error: '+e.error, 'e'); stop(); };
+  recognition.onend = () => { stop(); };
+  recognition.start();
+
+  function stop() {
+    isListening = false;
+    document.getElementById('btn-mic').classList.remove('on');
+  }
+}
+
+function setVstat(msg, type='') {
+  const el = document.getElementById('vstat');
+  el.textContent = '// ' + msg;
+  el.className = type;
+}
+
+// ══════════════════════════════════════════
+// VERIFY & ADD
+// ══════════════════════════════════════════
+function doVerify() {
+  const raw = document.getElementById('vtxt').value.trim();
+  if (!raw) return;
+  const parts = raw.split(/[,;|\s]+/).filter(Boolean);
+  let added = 0;
+  parts.forEach(p => {
+    const r = resolveSymbol(p);
+    if (!holdings.find(h => h.sym === r.sym)) {
+      holdings.push(r); added++;
+    }
+  });
+  document.getElementById('vtxt').value = '';
+  const inv = holdings.filter(h=>h.status==='i').length;
+  setVstat(`Added ${added} — ${inv} unknown symbols`, added > 0 ? 'a' : 'w');
+  renderAll();
+  if (added) toast(`${added} symbol(s) added`, 'g');
+}
+
+function quickAdd() {
+  const v = document.getElementById('qa-sym').value.trim();
+  if (!v) return;
+  const r = resolveSymbol(v);
+  if (holdings.find(h=>h.sym===r.sym)) { toast('Already in holdings','a'); return; }
+  holdings.push(r);
+  document.getElementById('qa-sym').value = '';
+  renderAll();
+  toast(r.sym + (r.status==='v' ? ' ✓ verified' : ' — unknown symbol'), r.status==='v'?'g':'a');
+}
+
+function removeH(sym) {
+  holdings = holdings.filter(h=>h.sym!==sym);
+  renderAll();
+}
+
+function cleanInvalid() {
+  const before = holdings.length;
+  holdings = holdings.filter(h=>h.status!=='i');
+  const rem = before - holdings.length;
+  renderAll();
+  toast(`Removed ${rem} unknown symbol(s)`, 'a');
+  if (panelOpen) togglePanel();
+}
+
+// ══════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════
+function renderAll() {
+  renderChips();
+  renderTable();
+  updateCounts();
+}
+
+function renderChips() {
+  const c = document.getElementById('chips');
+  const recent = holdings.slice(-10);
+  if (!recent.length) {
+    c.innerHTML = '<span style="font-family:var(--mono);font-size:10px;color:var(--text3)">None yet</span>';
+    return;
+  }
+  c.innerHTML = recent.map(h => `
+    <div class="chip ${h.status}">
+      ${h.sym}
+      <span class="chip-x" onclick="removeH('${h.sym}')">×</span>
+    </div>`).join('');
+}
+
+function renderTable() {
+  const empty = document.getElementById('tbl-empty');
+  const tbl = document.getElementById('htbl');
+  const tb = document.getElementById('htbody');
+  if (!holdings.length) {
+    empty.style.display=''; tbl.style.display='none'; return;
+  }
+  empty.style.display='none'; tbl.style.display='table';
+  tb.innerHTML = holdings.map((h,i)=>`
+    <tr>
+      <td class="mono" style="color:var(--text3)">${i+1}</td>
+      <td class="mono sym-${h.status}">${h.sym}</td>
+      <td style="font-size:11px;color:var(--text2)">${h.n}</td>
+      <td><span class="tag-sm tag-${h.status}">
+        ${h.status==='v'?'✓ NSE':h.status==='i'?'✗ Unknown':'⟳'}
+      </span></td>
+      <td><span class="rm-btn" onclick="removeH('${h.sym}')">×</span></td>
+    </tr>`).join('');
+}
+
+function updateCounts() {
+  const v = holdings.filter(h=>h.status==='v').length;
+  document.getElementById('h-badge').textContent = holdings.length + ' stocks';
+  document.getElementById('v-badge').textContent = v + ' verified';
+  document.getElementById('stk-chip').textContent = holdings.length + ' stocks';
+}
+
+// ══════════════════════════════════════════
+// FILE UPLOAD (panel)
+// ══════════════════════════════════════════
+document.getElementById('f-inp').addEventListener('change', function(){
+  const f = this.files[0]; if (!f) return;
+  uploadedFile = f;
+  document.getElementById('uz-name').textContent = '▤ ' + f.name;
+  document.getElementById('uz-name').style.display = 'block';
+  document.getElementById('btn-fp').style.display = 'block';
+  toast('File loaded: ' + f.name, 'g');
+});
+
+const uz = document.getElementById('uz');
+uz.addEventListener('dragover', e=>{e.preventDefault();uz.classList.add('drag')});
+uz.addEventListener('dragleave', ()=>uz.classList.remove('drag'));
+uz.addEventListener('drop', e=>{
+  e.preventDefault();uz.classList.remove('drag');
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  uploadedFile=f;
+  document.getElementById('uz-name').textContent='▤ '+f.name;
+  document.getElementById('uz-name').style.display='block';
+  document.getElementById('btn-fp').style.display='block';
+  toast('File dropped: '+f.name,'g');
+});
+
+document.getElementById('btn-fp').addEventListener('click', ()=>{
+  if (!uploadedFile) return;
+  const isCsv = uploadedFile.name.toLowerCase().endsWith('.csv');
+  const reader = new FileReader();
+  reader.onload = e => {
+    let data;
+    if (isCsv) {
+      const rows = e.target.result.split('\n').map(r=>r.split(','));
+      data={headers:rows[0],rows:rows.slice(1).filter(r=>r.some(c=>c.trim()))};
+    } else {
+      const wb = XLSX.read(e.target.result,{type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      data={headers:json[0]||[],rows:json.slice(1).filter(r=>r.some(c=>String(c).trim()))};
+    }
+    showModal(uploadedFile.name, data);
+    importFromFile(data);
+  };
+  isCsv ? reader.readAsText(uploadedFile) : reader.readAsBinaryString(uploadedFile);
+});
+
+function showModal(fname, data) {
+  document.getElementById('modal-ttl').textContent = fname;
+  const lim = 20;
+  document.getElementById('modal-body').innerHTML = `
+    <p style="font-family:var(--mono);font-size:9px;color:var(--text3);
+      letter-spacing:.1em;margin-bottom:12px">
+      SHOWING ${Math.min(data.rows.length,lim)} / ${data.rows.length} ROWS
+    </p>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr>${data.headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${data.rows.slice(0,lim).map(r=>
+        `<tr>${data.headers.map((_,i)=>`<td style="white-space:nowrap">${r[i]??''}</td>`).join('')}</tr>`
+      ).join('')}</tbody>
+    </table>
+    </div>
+    <div style="margin-top:14px;padding:10px 12px;background:var(--s2);border-radius:6px;
+      font-family:var(--mono);font-size:10px;color:var(--green)">
+      ✓ Symbols detected and imported to holdings
+    </div>`;
+  document.getElementById('modal-bg').classList.add('on');
+}
+
+function importFromFile(data) {
+  const ci = data.headers.findIndex(h=>/symbol|ticker|stock|scrip/i.test(String(h)));
+  if (ci===-1){toast('No Symbol column found','a');return}
+  let n=0;
+  data.rows.forEach(r=>{
+    const raw=String(r[ci]||'').trim(); if(!raw) return;
+    const res=resolveSymbol(raw);
+    if(!holdings.find(h=>h.sym===res.sym)){holdings.push(res);n++}
+  });
+  renderAll();
+  toast(`${n} symbols imported from file`,'g');
+}
+
+function closeModal(){document.getElementById('modal-bg').classList.remove('on')}
+document.getElementById('modal-bg').addEventListener('click',e=>{
+  if(e.target===document.getElementById('modal-bg'))closeModal()
+});
+
+// ══════════════════════════════════════════
+// IMAGE UPLOAD & AI ANALYSIS
+// ══════════════════════════════════════════
+const imgInp = document.getElementById('img-inp');
+imgInp.addEventListener('change', function(){
+  const f=this.files[0]; if(!f) return; loadImg(f);
+});
+
+// Also allow clicking the drop zone when it doesn't have image
+document.getElementById('drop-zone').addEventListener('click', function(e){
+  if(this.classList.contains('has-img')) return;
+  document.getElementById('img-inp').click();
+  e.stopPropagation();
+});
+
+document.getElementById('drop-zone').addEventListener('dragover',e=>{
+  e.preventDefault();document.getElementById('drop-zone').classList.add('drag')
+});
+document.getElementById('drop-zone').addEventListener('dragleave',()=>{
+  document.getElementById('drop-zone').classList.remove('drag')
+});
+document.getElementById('drop-zone').addEventListener('drop',e=>{
+  e.preventDefault();document.getElementById('drop-zone').classList.remove('drag');
+  const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) loadImg(f);
+});
+
+function loadImg(file) {
+  uploadedImgType = file.type;
+  const reader = new FileReader();
+  reader.onload = e => {
+    uploadedImgB64 = e.target.result.split(',')[1];
+    // Show preview
+    const dz = document.getElementById('drop-zone');
+    dz.style.display='none';
+    const box = document.getElementById('img-preview-box');
+    box.style.display='flex';
+    document.getElementById('img-thumb').innerHTML = `<img src="${e.target.result}" alt="portfolio">`;
+    document.getElementById('img-fname').textContent = file.name;
+    // reset analysis
+    showApState('idle');
+    document.getElementById('ap-footer').style.display='none';
+    toast('Image loaded — click Analyse','g');
+  };
+  reader.readAsDataURL(file);
+}
+
+function showApState(s) {
+  document.getElementById('ap-idle').style.display    = s==='idle'    ? 'flex':'none';
+  document.getElementById('ap-loading').style.display = s==='loading' ? 'flex':'none';
+  document.getElementById('ap-result').style.display  = s==='result'  ? 'flex':'none';
+}
+
+async function runAnalysis() {
+  if (!uploadedImgB64) return;
+  const btn = document.getElementById('btn-analyse');
+  btn.disabled=true; btn.textContent='⟳ Analysing…';
+  showApState('loading');
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{
+          role:'user',
+          content:[
+            {type:'image',source:{type:'base64',media_type:uploadedImgType,data:uploadedImgB64}},
+            {type:'text',text:`You are an expert at reading Indian stock portfolio screenshots from apps like Zerodha, Groww, Angel One, Kite, Upstox, Paytm Money, etc.
+
+Analyse this image and extract ALL visible stock holdings.
+
+Return ONLY valid JSON in this exact format:
+{
+  "stocks": [
+    {"symbol":"HDFCBANK","name":"HDFC Bank","sector":"Banking","confidence":0.95},
+    ...
+  ],
+  "observations": [
+    {"type":"warn","text":"Heavy concentration in Banking sector (40%)"},
+    {"type":"good","text":"Good diversification across 5 sectors"},
+    {"type":"info","text":"3 large-cap, 2 mid-cap stocks detected"}
+  ]
+}
+
+Rules:
+- Convert company names/short forms to NSE ticker symbols
+- confidence: 0-1 how sure you are of the symbol
+- observations: 2-3 useful portfolio-level observations
+- If image has no stocks, return {"stocks":[],"observations":[{"type":"warn","text":"No stock data found in image"}]}
+- Respond ONLY with JSON, no markdown`}
+          ]
+        }]
+      })
+    });
+    const data = await res.json();
+    const txt = data.content?.[0]?.text || '{}';
+    let parsed;
+    try { parsed = JSON.parse(txt.replace(/```json|```/g,'').trim()); }
+    catch { parsed = {stocks:[],observations:[{type:'warn',text:'Could not parse AI response'}]}; }
+    renderAnalysis(parsed);
+
+  } catch(err) {
+    // DEMO fallback for testing
+    renderAnalysis({
+      stocks:[
+        {symbol:'HDFCBANK',name:'HDFC Bank',sector:'Banking',confidence:0.98},
+        {symbol:'TCS',name:'Tata Consultancy Services',sector:'IT',confidence:0.97},
+        {symbol:'RELIANCE',name:'Reliance Industries',sector:'Energy',confidence:0.99},
+        {symbol:'BAJFINANCE',name:'Bajaj Finance',sector:'NBFC',confidence:0.95},
+        {symbol:'INFY',name:'Infosys',sector:'IT',confidence:0.96},
+        {symbol:'GPPL',name:'Gujarat Pipavav Port',sector:'Infrastructure',confidence:0.82},
+        {symbol:'IREDA',name:'IREDA',sector:'Finance',confidence:0.79},
+        {symbol:'HAL',name:'Hindustan Aeronautics',sector:'Defence',confidence:0.93},
+      ],
+      observations:[
+        {type:'warn',text:'Demo mode — AI API not connected. Showing sample analysis.'},
+        {type:'n',text:'8 stocks detected across 6 sectors'},
+        {type:'g',text:'Good large/mid-cap blend with defence exposure'}
+      ]
+    });
+  } finally {
+    btn.disabled=false; btn.textContent='⟳ ANALYSE PORTFOLIO';
+  }
+}
+
+function renderAnalysis(parsed) {
+  extractedStocks = parsed.stocks || [];
+  extractedChecked = new Set(extractedStocks.map(s=>s.symbol));
+
+  showApState('result');
+
+  // Sector bars
+  const sectorMap = {};
+  extractedStocks.forEach(s=>{
+    const sec = s.sector||'Other';
+    sectorMap[sec]=(sectorMap[sec]||0)+1;
+  });
+  const total = extractedStocks.length || 1;
+  const sorted = Object.entries(sectorMap).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('sector-bars').innerHTML = sorted.map(([sec,cnt])=>`
+    <div class="sb-row">
+      <div class="sb-name">${sec}</div>
+      <div class="sb-track">
+        <div class="sb-fill" style="width:${Math.round(cnt/total*100)}%"></div>
+      </div>
+      <div class="sb-pct">${Math.round(cnt/total*100)}%</div>
+    </div>`).join('');
+
+  // Observations
+  const obsMap = {warn:'w',good:'g',info:'n',n:'n'};
+  document.getElementById('obs-list').innerHTML = (parsed.observations||[]).map(o=>`
+    <div class="obs ${obsMap[o.type]||''}">
+      <span>${o.type==='warn'?'⚠':o.type==='good'?'✓':'ℹ'}</span>
+      <span>${o.text}</span>
+    </div>`).join('');
+
+  // Stock list
+  const list = document.getElementById('extracted-list');
+  list.innerHTML = '';
+  if (!extractedStocks.length) {
+    list.innerHTML='<div style="padding:24px;font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center">No stocks extracted from image</div>';
+  } else {
+    list.innerHTML = `
+      <div style="padding:8px 18px 6px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">
+        <span style="font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">
+          // Detected Stocks
+        </span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-left:auto">
+          ${extractedStocks.length} found
+        </span>
+      </div>` +
+    extractedStocks.map(s=>{
+      const known = !!NSE[s.symbol];
+      const conf = Math.round((s.confidence||0.8)*100);
+      return `<div class="ex-item" id="ei-${s.symbol}">
+        <div class="ex-sym ${known?'':'unk'}">${s.symbol}</div>
+        <div class="ex-name">${s.name}</div>
+        <div class="ex-sec">${s.sector||''}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:${conf>85?'var(--green)':'var(--amber)'};width:32px;text-align:right">${conf}%</div>
+        <div class="ex-check on" id="chk-${s.symbol}" onclick="toggleCheck('${s.symbol}')">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 6l3 3 5-5"/>
+          </svg>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Footer
+  const footer = document.getElementById('ap-footer');
+  footer.style.display = 'flex';
+  document.getElementById('ap-summary').textContent =
+    `${extractedStocks.length} stocks detected — select to import`;
+}
+
+function toggleCheck(sym) {
+  const el = document.getElementById('chk-'+sym);
+  if (extractedChecked.has(sym)) {
+    extractedChecked.delete(sym);
+    el.classList.remove('on');
+    el.innerHTML='';
+  } else {
+    extractedChecked.add(sym);
+    el.classList.add('on');
+    el.innerHTML=`<svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6l3 3 5-5"/></svg>`;
+  }
+  document.getElementById('ap-summary').textContent =
+    `${extractedChecked.size} of ${extractedStocks.length} selected`;
+}
+
+function importExtracted() {
+  let added = 0;
+  extractedStocks.filter(s=>extractedChecked.has(s.symbol)).forEach(s=>{
+    const r = resolveSymbol(s.symbol);
+    if (!holdings.find(h=>h.sym===r.sym)) { holdings.push(r); added++; }
+  });
+  renderAll();
+  toast(`${added} stocks imported — switching to holdings view`,'g');
+  setTimeout(()=>setMode('update'), 600);
+}
+
+function clearExtracted() {
+  extractedStocks=[];extractedChecked.clear();
+  showApState('idle');
+  document.getElementById('ap-footer').style.display='none';
+  document.getElementById('img-preview-box').style.display='none';
+  document.getElementById('drop-zone').style.display='flex';
+  document.getElementById('drop-zone').classList.remove('has-img');
+  uploadedImgB64=null;
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+let _tt;
+function toast(msg, type='') {
+  clearTimeout(_tt);
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='on '+type;
+  _tt=setTimeout(()=>el.className='',3500);
+}
+
+// ══════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════
+const DEMO = ['HDFCBANK','TCS','RELIANCE','GPPL','IREDA','HAL','TATASTEEL','BAJFINANCE'];
+DEMO.forEach(s=>{const r=resolveSymbol(s);holdings.push(r)});
+renderAll();
+setVstat('ready — enter stock symbols above or use mic');
+</script>
+
+</body>
+</html>
