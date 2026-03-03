@@ -40,6 +40,31 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 .tb-pill.live{border-color:rgba(0,240,160,.35);color:var(--green);background:rgba(0,240,160,.05)}
 .tb-pill.time{border-color:rgba(255,184,48,.25);color:var(--amber)}
 
+/* ── PAGE NAV TABS ── */
+.nav-tabs{display:flex;align-items:center;gap:2px;background:rgba(11,16,24,.8);
+  border:1px solid var(--bd);border-radius:5px;padding:3px;flex-shrink:0}
+.nav-tab{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 12px;border-radius:3px;cursor:pointer;
+  font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--t2);border:1px solid transparent;
+  transition:all .18s ease;white-space:nowrap;user-select:none;
+  text-decoration:none;
+}
+.nav-tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.nav-tab.active{
+  color:var(--green);
+  background:rgba(0,240,160,.07);
+  border-color:rgba(0,240,160,.2);
+}
+.nav-tab .nt-ico{font-size:11px;flex-shrink:0}
+.nav-tab .nt-dot{
+  width:5px;height:5px;border-radius:50%;flex-shrink:0;
+  background:var(--green);box-shadow:0 0 6px var(--green);
+  display:none;
+}
+.nav-tab.active .nt-dot{display:block}
+
 /* ── BODY ── */
 #body{flex:1;display:flex;min-height:0}
 
@@ -159,6 +184,27 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="tb-sub">SENSEX · NIFTY 50 · GLOBAL CORRELATION MONITOR · Q1 FY26</div>
   </div>
   <div class="tb-sp"></div>
+
+  <!-- ── PAGE NAV ── -->
+  <div class="nav-tabs">
+    <a class="nav-tab active" id="nt-global" onclick="navTo('Global')">
+      <span class="nt-dot"></span>
+      <span class="nt-ico">🌐</span>
+      <span>Global</span>
+    </a>
+    <a class="nav-tab" id="nt-portfolio" onclick="navTo('Portfolio')">
+      <span class="nt-dot"></span>
+      <span class="nt-ico">◈</span>
+      <span>Portfolio</span>
+    </a>
+    <a class="nav-tab" id="nt-scanner" onclick="navTo('Scanner')">
+      <span class="nt-dot"></span>
+      <span class="nt-ico">📷</span>
+      <span>Scanner</span>
+    </a>
+  </div>
+
+  <div class="tb-sep"></div>
   <div class="tb-pill live">● 77 Stocks Live</div>
   <div class="tb-sep"></div>
   <div class="tb-pill time" id="tb-clk">--:--:-- IST</div>
@@ -510,6 +556,29 @@ let rTmr;
 window.addEventListener('resize',()=>{clearTimeout(rTmr);rTmr=setTimeout(buildCorrLines,250)});
 
 buildCorrLines();buildDots();buildCorrCards();buildComCards();renderNews();
+
+// ── PAGE NAVIGATION ────────────────────────────────────────────────────────
+// The page lives inside a Streamlit iframe. To navigate between Streamlit
+// pages we write to window.parent.location. Streamlit Cloud slugifies page
+// file names: 01_Global → /Global, 02_Portfolio → /Portfolio, 03_Scanner → /Scanner
+function navTo(page) {
+  // Visual feedback: switch active tab immediately
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const target = document.getElementById('nt-' + page.toLowerCase());
+  if (target) target.classList.add('active');
+
+  // Brief flash so user sees the tap register before navigate
+  setTimeout(function() {
+    try {
+      // Grab the Streamlit app origin from parent URL
+      const origin = window.parent.location.origin;
+      window.parent.location.href = origin + '/' + page;
+    } catch(e) {
+      // Fallback: same-origin direct assign
+      window.location.href = window.location.origin + '/' + page;
+    }
+  }, 120);
+}
 </script>
 </body>
 </html>

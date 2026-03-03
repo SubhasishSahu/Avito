@@ -83,6 +83,19 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
 .t-pill.on{border-color:rgba(0,229,160,.3);color:var(--green);background:rgba(0,229,160,.05)}
 .t-pill.warn{border-color:rgba(245,166,35,.3);color:var(--amber)}
 
+/* ── PAGE NAV TABS ── */
+.nav-tabs{display:flex;align-items:center;gap:2px;background:rgba(11,16,24,.8);
+  border:1px solid var(--bd);border-radius:5px;padding:3px;flex-shrink:0}
+.nav-tab{display:flex;align-items:center;gap:5px;padding:4px 11px;border-radius:3px;
+  cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--t3);border:1px solid transparent;transition:all .18s ease;
+  white-space:nowrap;user-select:none}
+.nav-tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.nav-tab.active{color:var(--green);background:rgba(0,229,160,.07);border-color:rgba(0,229,160,.2)}
+.nav-tab .nt-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;
+  background:var(--green);box-shadow:0 0 6px var(--green);display:none}
+.nav-tab.active .nt-dot{display:block}
+
 /* ── PAGES ── */
 #main{flex:1;display:flex;flex-direction:column;min-width:0}
 #pages{flex:1;overflow:hidden;position:relative}
@@ -224,6 +237,18 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
   <div id="top">
     <div class="t-bc">AVITO / <span id="t-pg">Overview</span></div>
     <div class="t-sp"></div>
+    <!-- ── PAGE NAV ── -->
+    <div class="nav-tabs">
+      <div class="nav-tab" onclick="navTo('Global')">
+        <span class="nt-dot"></span><span>🌐 Global</span>
+      </div>
+      <div class="nav-tab active" onclick="navTo('Portfolio')">
+        <span class="nt-dot"></span><span>◈ Portfolio</span>
+      </div>
+      <div class="nav-tab" onclick="navTo('Scanner')">
+        <span class="nt-dot"></span><span>📷 Scanner</span>
+      </div>
+    </div>
     <div class="t-pill on" id="t-status">● --</div>
     <div class="t-pill" id="t-clk">--:-- IST</div>
     <div class="t-pill warn" id="t-warn" style="display:none">⚠ delisted</div>
@@ -761,6 +786,21 @@ function fSig(t){renderSigs(t==='all'?SIGNALS:SIGNALS.filter(s=>s.signal===t))}
 <span class="ts">01:51:14Z </span><span class="ok">[INFO]</span>  <span class="hi">Harvest done: 77 ok, 2 failed, 498.9s</span>
 <span class="ts">         </span>        <span class="ok">yf_q1_blocked: False · yf_q2_blocked: False · status: partial</span>`;
 })();
+
+// ── PAGE NAVIGATION ──────────────────────────────────────────────────────
+function navTo(page) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const map = {Global:'nt-global', Portfolio:'nt-portfolio', Scanner:'nt-scanner'};
+  // inline tabs don't have ids — just mark active by data if needed
+  setTimeout(function() {
+    try {
+      const origin = window.parent.location.origin;
+      window.parent.location.href = origin + '/' + page;
+    } catch(e) {
+      window.location.href = window.location.origin + '/' + page;
+    }
+  }, 120);
+}
 </script>
 </body>
 </html>
