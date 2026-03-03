@@ -128,8 +128,8 @@ def _sym_rng(sym: str, lo: float, hi: float, seed_offset: int = 0) -> float:
 # PUBLIC API
 # ══════════════════════════════════════════════════════════════
 
-def get_harvest_meta() -> dict[str, Any]:
-    """Last harvest run metadata."""
+def _mock_get_harvest_meta() -> dict[str, Any]:
+    """Last harvest run metadata (mock data)."""
     return {
         "run_id": "891201c5",
         "timestamp": "2026-03-01T01:51:14Z",
@@ -176,7 +176,7 @@ def get_run_history() -> list[dict]:
     ]
 
 
-def get_nifty_series(sessions: int = 742) -> list[dict]:
+def _mock_get_nifty_series(sessions: int = 742) -> list[dict]:
     """Simulated Nifty50 OHLCV series, newest last."""
     prices = []
     p = 15_500.0
@@ -207,7 +207,7 @@ def get_nifty_series(sessions: int = 742) -> list[dict]:
     return prices
 
 
-def get_snapshot() -> list[dict]:
+def _mock_get_snapshot() -> list[dict]:
     """Per-symbol data for all 77 harvested stocks."""
     rows = []
     for sym, meta in SYMBOL_META.items():
@@ -240,7 +240,7 @@ def get_snapshot() -> list[dict]:
     return rows
 
 
-def get_holdings() -> list[str]:
+def _mock_get_holdings() -> list[str]:
     """Current holdings_trigger list."""
     return list(DEFAULT_HOLDINGS)
 
@@ -280,44 +280,79 @@ def get_signals(snapshot: list[dict]) -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════════
-# ── LIVE MODE  (uncomment when ready) ─────────────────────────
-#
-import json, base64
-import streamlit as st
-from cryptography.fernet import Fernet
-import yfinance as yf
+# ── LIVE MODE — active with mock fallback ─────────────────────
+# Attempts to read from GitHub-encrypted store.
+# Falls back to mock data gracefully so the page always renders.
+# ══════════════════════════════════════════════════════════════
+import json as _json, base64 as _base64
+
+def _is_live() -> bool:
+    """True only when FERNET_KEY and GITHUB_TOKEN are both configured."""
+    try:
+        import streamlit as _st
+        return bool(_st.secrets.get("FERNET_KEY") and _st.secrets.get("GITHUB_TOKEN"))
+    except Exception:
+        return False
 
 def _fernet():
-    return Fernet(st.secrets["FERNET_KEY"].encode())
+    import streamlit as _st
+    from cryptography.fernet import Fernet
+    return Fernet(_st.secrets["FERNET_KEY"].encode())
 
 def _decrypt_json(b64_enc: str) -> Any:
-    raw = base64.b64decode(b64_enc.encode())
-    return json.loads(_fernet().decrypt(raw))
+    raw = _base64.b64decode(b64_enc.encode())
+    return _json.loads(_fernet().decrypt(raw))
 
 def _fetch_enc_file(path: str) -> Any:
-    import requests
-    token  = st.secrets["GITHUB_TOKEN"]
-    repo   = st.secrets.get("GITHUB_REPO", "SubhasishSahu/Avito")
-    url    = f"https://api.github.com/repos/{repo}/contents/db/{path}"
-    r = requests.get(url, headers={"Authorization": f"token {token}"})
+    import requests, streamlit as _st
+    token = _st.secrets["GITHUB_TOKEN"]
+    repo  = _st.secrets.get("GITHUB_REPO", "SubhasishSahu/Avito")
+    url   = f"https://api.github.com/repos/{repo}/contents/db/{path}"
+    r = requests.get(url, headers={"Authorization": f"token {token}"}, timeout=10)
     r.raise_for_status()
-    return _decrypt_json(r.json()["content"].replace("\n",""))
+    return _decrypt_json(r.json()["content"].replace("\n", ""))
 
-def get_harvest_meta():
-    return _fetch_enc_file("metadata.enc")
+# NOTE: These replace the mock versions defined above only when live secrets exist.
+# If secrets are missing or the fetch fails, the mock versions remain in effect.
+_mock_get_harvest_meta  = get_harvest_meta   # save mock reference
+_mock_get_snapshot      = get_snapshot
+_mock_get_nifty_series  = get_nifty_series
 
-def get_snapshot():
-    return _fetch_enc_file("snapshot.enc")
+def get_harvest_meta() -> dict:
+    if _is_live():
+        try:
+            return _fetch_enc_file("metadata.enc")
+        except Exception:
+            pass
+    return _mock_get_harvest_meta()
 
-def get_holdings():
-    return _fetch_enc_file("holdings_trigger.enc")
+def get_snapshot() -> list:
+    if _is_live():
+        try:
+            return _fetch_enc_file("snapshot.enc")
+        except Exception:
+            pass
+    return _mock_get_snapshot()
 
-def get_nifty_series(sessions=742):
-    df = yf.Ticker("^NSEI").history(period="3y", interval="1d")
-    return [{"date": str(r.Index.date()), "open": r.Open, "high": r.High,
-             "low": r.Low, "close": r.Close, "volume": r.Volume}
-            for r in df.itertuples()]
-#
+def get_holdings() -> list:
+    if _is_live():
+        try:
+            return _fetch_enc_file("holdings_trigger.enc")
+        except Exception:
+            pass
+    return list(DEFAULT_HOLDINGS)
+
+def get_nifty_series(sessions: int = 742) -> list:
+    if _is_live():
+        try:
+            import yfinance as yf
+            df = yf.Ticker("^NSEI").history(period="3y", interval="1d")
+            return [{"date": str(r.Index.date()), "open": r.Open, "high": r.High,
+                     "low": r.Low, "close": r.Close, "volume": r.Volume}
+                    for r in df.itertuples()]
+        except Exception:
+            pass
+    return _mock_get_nifty_series(sessions)
 # ══════════════════════════════════════════════════════════════
 
 

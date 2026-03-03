@@ -89,7 +89,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
 .nav-tab{display:flex;align-items:center;gap:5px;padding:4px 11px;border-radius:3px;
   cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--t3);border:1px solid transparent;transition:all .18s ease;
-  white-space:nowrap;user-select:none}
+  white-space:nowrap;user-select:none;text-decoration:none}
 .nav-tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
 .nav-tab.active{color:var(--green);background:rgba(0,229,160,.07);border-color:rgba(0,229,160,.2)}
 .nav-tab .nt-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;
@@ -239,15 +239,15 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
     <div class="t-sp"></div>
     <!-- ── PAGE NAV ── -->
     <div class="nav-tabs">
-      <div class="nav-tab" onclick="navTo('Global')">
+      <a class="nav-tab" href="/Global" target="_parent">
         <span class="nt-dot"></span><span>🌐 Global</span>
-      </div>
-      <div class="nav-tab active" onclick="navTo('Portfolio')">
+      </a>
+      <a class="nav-tab active" href="/Portfolio" target="_parent">
         <span class="nt-dot"></span><span>◈ Portfolio</span>
-      </div>
-      <div class="nav-tab" onclick="navTo('Scanner')">
+      </a>
+      <a class="nav-tab" href="/Scanner" target="_parent">
         <span class="nt-dot"></span><span>📷 Scanner</span>
-      </div>
+      </a>
     </div>
     <div class="t-pill on" id="t-status">● --</div>
     <div class="t-pill" id="t-clk">--:-- IST</div>
