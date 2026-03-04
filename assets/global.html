@@ -15,239 +15,250 @@
   --mono:'JetBrains Mono',monospace;--sans:'Syne',sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:12px;overflow:hidden}
+
+/* ── Base: natural scroll, content defines height ── */
+html{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:12px}
+body{
+  min-height:100%;
+  background:var(--bg);
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+
+/* CRT grain */
 body::after{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 3px)}
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 3px)}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:radial-gradient(circle,rgba(22,32,48,.6) 1px,transparent 1px);background-size:28px 28px}
+  background-image:radial-gradient(circle,rgba(22,32,48,.55) 1px,transparent 1px);background-size:28px 28px}
 
-/* ── LAYOUT ── */
-#shell{position:relative;height:100vh;display:flex;flex-direction:column;z-index:1;overflow:hidden}
+/* ── SHELL: natural flow column ── */
+#shell{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100%}
 
-/* ── TOPBAR ── */
-#topbar{height:44px;flex-shrink:0;background:rgba(7,11,18,.98);border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;padding:0 16px;gap:12px;font-family:var(--mono)}
-.tb-logo{font-size:14px;font-weight:700;color:var(--green);letter-spacing:.14em;
-  display:flex;align-items:center;gap:8px}
-.tb-pulse{width:6px;height:6px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite;flex-shrink:0}
+/* ── TOPBAR: sticks at top while scrolling ── */
+#topbar{
+  position:sticky;top:0;z-index:200;
+  height:44px;
+  background:rgba(7,11,18,.98);
+  border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;
+  padding:0 16px;gap:10px;
+  font-family:var(--mono);
+  backdrop-filter:blur(8px);
+}
+.tb-logo{font-size:14px;font-weight:700;color:var(--green);letter-spacing:.14em;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.tb-pulse{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2.5s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px var(--green)}50%{opacity:.1;box-shadow:none}}
 .tb-sep{width:1px;height:18px;background:var(--bd);flex-shrink:0}
-.tb-title{font-size:13px;color:var(--text);font-family:var(--sans);font-weight:700;letter-spacing:.01em}
-.tb-sub{font-size:8px;color:var(--t2);letter-spacing:.06em;font-family:var(--mono)}
-.tb-sp{flex:1}
-.tb-pill{font-size:8px;padding:2px 9px;border-radius:2px;border:1px solid var(--bd2);color:var(--t2);letter-spacing:.06em}
+.tb-titles{min-width:0;overflow:hidden}
+.tb-title{font-size:13px;color:var(--text);font-family:var(--sans);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-sub{font-size:7.5px;color:var(--t2);letter-spacing:.06em;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-sp{flex:1;min-width:4px}
+.tb-pill{font-size:8px;padding:2px 8px;border-radius:2px;border:1px solid var(--bd2);color:var(--t2);letter-spacing:.06em;white-space:nowrap;flex-shrink:0}
 .tb-pill.live{border-color:rgba(0,240,160,.35);color:var(--green);background:rgba(0,240,160,.05)}
 .tb-pill.time{border-color:rgba(255,184,48,.25);color:var(--amber)}
 
-/* ── PAGE NAV TABS ── */
-.nav-tabs{display:flex;align-items:center;gap:2px;background:rgba(11,16,24,.8);
-  border:1px solid var(--bd);border-radius:5px;padding:3px;flex-shrink:0}
-.nav-tab{
-  display:flex;align-items:center;gap:6px;
-  padding:4px 12px;border-radius:3px;cursor:pointer;
-  font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--t2);border:1px solid transparent;
-  transition:all .18s ease;white-space:nowrap;user-select:none;
-  text-decoration:none;
-}
+/* ── PAGE NAV ── */
+.nav-tabs{display:flex;align-items:center;gap:2px;background:rgba(11,16,24,.8);border:1px solid var(--bd);border-radius:5px;padding:3px;flex-shrink:0}
+.nav-tab{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:3px;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--t2);border:1px solid transparent;transition:all .18s;white-space:nowrap;user-select:none;text-decoration:none}
 .nav-tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
-.nav-tab.active{
-  color:var(--green);
-  background:rgba(0,240,160,.07);
-  border-color:rgba(0,240,160,.2);
-}
-.nav-tab .nt-ico{font-size:11px;flex-shrink:0}
-.nav-tab .nt-dot{
-  width:5px;height:5px;border-radius:50%;flex-shrink:0;
-  background:var(--green);box-shadow:0 0 6px var(--green);
-  display:none;
-}
+.nav-tab.active{color:var(--green);background:rgba(0,240,160,.07);border-color:rgba(0,240,160,.2)}
+.nt-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);display:none;flex-shrink:0}
 .nav-tab.active .nt-dot{display:block}
 
-/* ── BODY: map (left 56%) | right-panel (right 44%) ── */
-#body{flex:1;display:flex;min-height:0;overflow:hidden}
-
-/* ── MAP PANE 56% ── */
-#map-pane{flex:0 0 56%;position:relative;display:flex;flex-direction:column;
-  border-right:1px solid var(--bd);overflow:hidden;min-width:0}
-
-/* map column header */
-.map-col-hd{height:32px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;padding:0 12px;gap:8px;font-family:var(--mono);
-  font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+/* ── MAP SECTION: full width, fixed height ── */
+#map-section{
+  position:relative;
+  width:100%;
+  height:420px;          /* fixed, comfortable for map */
+  border-bottom:1px solid var(--bd);
+  background:var(--bg);
+  overflow:hidden;
+  flex-shrink:0;
+}
+/* Map column header */
+.map-col-hd{
+  height:32px;flex-shrink:0;
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 12px;gap:8px;
+  font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);
+}
 .map-col-hd-t{color:var(--t2)}
 .map-col-stats{margin-left:auto;display:flex;gap:5px}
-.mcs{font-family:var(--mono);font-size:7px;padding:2px 6px;border-radius:2px;
-  border:1px solid var(--bd);color:var(--t3)}
+.mcs{font-family:var(--mono);font-size:7px;padding:2px 6px;border-radius:2px;border:1px solid var(--bd);color:var(--t3)}
 .mcs.on{border-color:rgba(0,240,160,.25);color:var(--green)}
-
-#map-svg-wrap{flex:1;position:relative;min-height:0;overflow:hidden;display:flex}
+#map-svg-wrap{position:absolute;inset:32px 0 0 0;overflow:hidden}
 #map-svg{width:100%;height:100%;display:block}
 
-/* ── RIGHT PANEL 44%: ctx top | news bottom, stacked vertically ── */
-#right-panel{flex:1;display:flex;flex-direction:column;
-  overflow:hidden;min-width:0;min-height:0}
+/* Tooltip */
+#tt{position:absolute;z-index:500;pointer-events:none;background:rgba(3,6,11,.97);border:1px solid var(--bd2);border-radius:6px;padding:9px 12px;font-family:var(--mono);min-width:175px;max-width:220px;opacity:0;transition:opacity .12s}
+.tt-nm{font-size:11px;color:var(--text);font-weight:700;margin-bottom:2px}
+.tt-ix{font-size:7.5px;color:var(--t2);margin-bottom:5px}
+.tt-row{display:flex;justify-content:space-between;gap:10px;margin-bottom:3px;font-size:8.5px}
+.tt-lb{color:var(--t3)}.tt-vl{color:var(--text)}
+.tt-r-val{font-size:12px;font-weight:700}
+.tt-bar-tr{margin-top:6px;padding-top:5px;border-top:1px solid var(--bd);height:3px;background:var(--bd);border-radius:2px;overflow:hidden}
+.tt-bar-fl{height:100%;border-radius:2px}
+.tt-hint{font-size:7px;color:var(--amber);margin-top:5px;padding-top:4px;border-top:1px solid var(--bd)}
 
-/* ── CTX PANE: top 52% of right panel ── */
-#ctx-pane{flex:0 0 52%;display:flex;flex-direction:column;
-  border-bottom:1px solid var(--bd);overflow:hidden;min-height:0}
-
-/* ── NEWS PANE: bottom 48% of right panel ── */
-#news-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
-
-/* ── SHARED PANE HEADER ── */
-.pane-hd{height:32px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;padding:0 12px;gap:6px;font-family:var(--mono);
-  font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
-.pane-hd-t{color:var(--t2)}
-.pane-hd-r{margin-left:auto;font-size:7px;color:var(--t3)}
-
-/* ── SCROLL AREAS: min-height:0 is critical to shrink in flex context ── */
-.pane-scroll{flex:1;overflow-y:auto;overflow-x:hidden;
-  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;min-height:0}
-.pane-scroll::-webkit-scrollbar{width:3px}
-.pane-scroll::-webkit-scrollbar-thumb{background:var(--bd2)}
-
-/* ── ALERT BAR ── */
-#alert-bar{height:24px;flex-shrink:0;background:rgba(3,6,11,.98);border-top:1px solid var(--bd);
-  display:flex;align-items:center;padding:0 10px;gap:8px;font-family:var(--mono);font-size:8px;overflow:hidden}
-.a-tag{flex-shrink:0;font-size:7px;padding:1px 7px;border-radius:2px;
-  border:1px solid rgba(255,184,48,.3);color:var(--amber);letter-spacing:.08em;text-transform:uppercase}
-.a-ticker{flex:1;overflow:hidden;white-space:nowrap}
-.a-scroll{display:inline-block;animation:ticker 55s linear infinite;white-space:nowrap}
-@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.ai{display:inline-block;padding:0 14px;color:var(--t2);border-right:1px solid var(--bd)}
-.ai.up{color:var(--green)}.ai.dn{color:var(--red)}.ai.warn{color:var(--amber)}
-
-/* ── SVG MAP ── */
+/* SVG map styles */
 .bg-l,.cont{pointer-events:none}
 .cont{fill:rgba(10,16,26,.75);stroke:rgba(61,184,255,.055);stroke-width:.4}
 .grat{stroke:rgba(22,32,50,.45);stroke-width:.3;fill:none;pointer-events:none}
 .equat{stroke:rgba(61,184,255,.08);stroke-width:.4;fill:none;stroke-dasharray:4 8;pointer-events:none}
-
 .cl{fill:none;pointer-events:none;stroke-linecap:round}
 .cl.fl{stroke-dasharray:10 7;animation:flow-in 12s linear infinite}
 @keyframes flow-in{from{stroke-dashoffset:280}to{stroke-dashoffset:0}}
 .cl.sp-s{animation-duration:22s}.cl.sp-m{animation-duration:15s}.cl.sp-f{animation-duration:9s}
-
 .idx-dot{cursor:crosshair}
 .idx-ring{fill:none;stroke-width:1.5;animation:rpulse 3s ease-in-out infinite}
 @keyframes rpulse{0%,100%{r:12;opacity:.3}50%{r:17;opacity:.08}}
 .idx-lbl{font-family:'JetBrains Mono',monospace;font-size:8.5px;fill:rgba(192,212,234,.5);pointer-events:none}
 .idx-lbl.india{fill:var(--green);font-size:10.5px;font-weight:700}
 
-/* ── TOOLTIP ── */
-#tt{position:absolute;z-index:500;pointer-events:none;background:rgba(3,6,11,.97);
-  border:1px solid var(--bd2);border-radius:6px;padding:9px 12px;font-family:var(--mono);
-  min-width:175px;max-width:220px;opacity:0;transition:opacity .12s}
-.tt-nm{font-size:11px;color:var(--text);font-weight:700;margin-bottom:2px}
-.tt-ix{font-size:7.5px;color:var(--t2);margin-bottom:5px}
-.tt-row{display:flex;justify-content:space-between;gap:10px;margin-bottom:3px;font-size:8.5px}
-.tt-lb{color:var(--t3)}.tt-vl{color:var(--text)}
-.tt-r-val{font-size:12px;font-weight:700}
-.tt-bar-tr{margin-top:6px;padding-top:5px;border-top:1px solid var(--bd);
-  height:3px;background:var(--bd);border-radius:2px;overflow:hidden}
-.tt-bar-fl{height:100%;border-radius:2px}
-.tt-hint{font-size:7px;color:var(--amber);margin-top:5px;padding-top:4px;border-top:1px solid var(--bd)}
+/* ── LOWER ROW: ctx-pane left | news-pane right ── */
+#lower-row{
+  display:flex;
+  min-height:380px;       /* enough for comfortable reading */
+  border-bottom:1px solid var(--bd);
+}
 
-/* ── CTX CARDS ── */
-.csec{padding:9px 11px;border-bottom:1px solid var(--bd)}
-.csec-t{font-family:var(--mono);font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin-bottom:7px}
-.cc{padding:8px 9px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);margin-bottom:5px;cursor:default}
+/* ── MARKET CONTEXT ── */
+#ctx-pane{
+  flex:0 0 42%;
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--bd);
+  overflow:hidden;
+}
+.pane-hd{
+  height:32px;flex-shrink:0;
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 12px;gap:6px;
+  font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);
+}
+.pane-hd-t{color:var(--t2)}
+.pane-hd-r{margin-left:auto;font-size:7px;color:var(--t3)}
+.pane-scroll{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;
+}
+.pane-scroll::-webkit-scrollbar{width:3px}
+.pane-scroll::-webkit-scrollbar-thumb{background:var(--bd2)}
+
+/* ── MARKET INTELLIGENCE ── */
+#news-pane{
+  flex:1;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.nf{display:flex;gap:3px;padding:6px 10px;border-bottom:1px solid var(--bd);flex-wrap:wrap;flex-shrink:0;background:var(--s1)}
+.nfb{font-family:var(--mono);font-size:7px;padding:2px 6px;border-radius:2px;border:1px solid var(--bd2);color:var(--t3);cursor:pointer;letter-spacing:.06em;background:transparent;transition:all .12s}
+.nfb.on{border-color:rgba(61,184,255,.4);color:var(--blue);background:rgba(61,184,255,.06)}
+.nc{padding:8px 10px;border-bottom:1px solid var(--bd);transition:background .12s;cursor:default}
+.nc:hover{background:var(--s2)}
+.nc-src{font-family:var(--mono);font-size:7px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:2px}
+.nc-ttl{font-size:10px;color:var(--text);line-height:1.4;margin-bottom:2px;font-weight:500}
+.nc-sum{font-size:9px;color:var(--t2);line-height:1.5}
+.nc-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+.nc-tag{font-family:var(--mono);font-size:7px;padding:1px 5px;border-radius:2px;background:var(--s2);border:1px solid var(--bd2);color:var(--t3)}
+.nc-date{font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:2px}
+
+/* ── CONTEXT CARDS ── */
+.csec{padding:8px 10px;border-bottom:1px solid var(--bd)}
+.csec-t{font-family:var(--mono);font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin-bottom:6px}
+.cc{padding:7px 8px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);margin-bottom:4px;cursor:default}
 .cc:hover{border-color:var(--bd2);background:var(--s3)}
-.cc-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.cc-top{display:flex;align-items:center;gap:6px;margin-bottom:3px}
 .cc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .cc-nm{font-family:var(--mono);font-size:9px;color:var(--text);flex:1}
 .cc-r{font-family:var(--mono);font-size:9px;font-weight:700}
-.cc-bt{height:3px;background:var(--bd);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.cc-bt{height:3px;background:var(--bd);border-radius:2px;overflow:hidden;margin-bottom:3px}
 .cc-bf{height:100%;border-radius:2px}
-.cc-meta{display:flex;gap:7px;font-family:var(--mono);font-size:7px;color:var(--t3)}
-
-/* ── COMMODITY CARDS ── */
-.comc{padding:8px 9px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);margin-bottom:5px}
+.cc-meta{display:flex;gap:6px;font-family:var(--mono);font-size:7px;color:var(--t3)}
+.comc{padding:7px 8px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);margin-bottom:4px}
 .comc-nm{font-family:var(--mono);font-size:9px;color:var(--text)}
-.comc-desc{font-family:var(--mono);font-size:7.5px;color:var(--t3);margin:3px 0 5px;line-height:1.5}
+.comc-desc{font-family:var(--mono);font-size:7.5px;color:var(--t3);margin:2px 0 4px;line-height:1.5}
 .comc-tags{display:flex;flex-wrap:wrap;gap:3px}
-.comc-tag{font-family:var(--mono);font-size:7px;padding:1px 6px;border-radius:2px;
-  background:var(--s3);border:1px solid var(--bd2);color:var(--t3)}
+.comc-tag{font-family:var(--mono);font-size:7px;padding:1px 5px;border-radius:2px;background:var(--s3);border:1px solid var(--bd2);color:var(--t3)}
 .comc-tag.hi{border-color:rgba(255,184,48,.3);color:var(--amber)}
-
-/* ── LEGEND ── */
-.leg-s{padding:9px 11px;border-bottom:1px solid var(--bd)}
-.leg-r{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:8px;color:var(--t2)}
+.leg-s{padding:8px 10px;border-bottom:1px solid var(--bd)}
+.leg-r{display:flex;align-items:center;gap:7px;margin-bottom:4px;font-size:8px;color:var(--t2)}
 .leg-d{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 
-/* ── NEWS ── */
-.nf{display:flex;gap:4px;padding:7px 10px;border-bottom:1px solid var(--bd);
-  flex-wrap:wrap;flex-shrink:0;background:var(--s1)}
-.nfb{font-family:var(--mono);font-size:7px;padding:2px 7px;border-radius:2px;
-  border:1px solid var(--bd2);color:var(--t3);cursor:pointer;letter-spacing:.06em;background:transparent}
-.nfb.on{border-color:rgba(61,184,255,.4);color:var(--blue);background:rgba(61,184,255,.06)}
-.nc{padding:9px 11px;border-bottom:1px solid var(--bd);transition:background .12s;cursor:default}
-.nc:hover{background:var(--s2)}
-.nc-src{font-family:var(--mono);font-size:7px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:2px}
-.nc-ttl{font-size:11px;color:var(--text);line-height:1.4;margin-bottom:3px;font-weight:500}
-.nc-sum{font-size:10px;color:var(--t2);line-height:1.5}
-.nc-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
-.nc-tag{font-family:var(--mono);font-size:7px;padding:1px 5px;border-radius:2px;
-  background:var(--s2);border:1px solid var(--bd2);color:var(--t3)}
-.nc-date{font-family:var(--mono);font-size:7px;color:var(--t3);margin-top:3px}
+/* ── ALERT BAR ── */
+#alert-bar{
+  height:24px;flex-shrink:0;
+  position:sticky;bottom:0;z-index:200;
+  background:rgba(3,6,11,.98);
+  border-top:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 10px;gap:8px;
+  font-family:var(--mono);font-size:8px;overflow:hidden;
+  backdrop-filter:blur(8px);
+}
+.a-tag{flex-shrink:0;font-size:7px;padding:1px 7px;border-radius:2px;border:1px solid rgba(255,184,48,.3);color:var(--amber);letter-spacing:.08em;text-transform:uppercase}
+.a-ticker{flex:1;overflow:hidden;white-space:nowrap}
+.a-scroll{display:inline-block;animation:ticker 55s linear infinite;white-space:nowrap}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.ai{display:inline-block;padding:0 14px;color:var(--t2);border-right:1px solid var(--bd)}
+.ai.up{color:var(--green)}.ai.dn{color:var(--red)}.ai.warn{color:var(--amber)}
+
+/* ── Responsive: stack vertically on narrow screens ── */
+@media(max-width:720px){
+  #lower-row{flex-direction:column}
+  #ctx-pane{flex:none;height:340px;border-right:none;border-bottom:1px solid var(--bd)}
+  #news-pane{height:400px}
+}
 </style>
 </head>
 <body>
 <div id="shell">
 
-<!-- ══ TOPBAR ══ -->
+<!-- ══ TOPBAR (sticky) ══ -->
 <div id="topbar">
   <div class="tb-logo"><div class="tb-pulse"></div>AVITO</div>
   <div class="tb-sep"></div>
-  <div>
+  <div class="tb-titles">
     <div class="tb-title">Global Financial Intelligence</div>
     <div class="tb-sub">SENSEX · NIFTY 50 · GLOBAL CORRELATION MONITOR · Q1 FY26</div>
   </div>
   <div class="tb-sp"></div>
   <div class="nav-tabs">
     <a class="nav-tab active" id="nt-global" href="/Global" target="_parent">
-      <span class="nt-dot"></span><span class="nt-ico">🌐</span><span>Global</span>
+      <span class="nt-dot"></span><span>🌐</span><span>Global</span>
     </a>
     <a class="nav-tab" id="nt-portfolio" href="/Portfolio" target="_parent">
-      <span class="nt-dot"></span><span class="nt-ico">◈</span><span>Portfolio</span>
+      <span class="nt-dot"></span><span>◈</span><span>Portfolio</span>
     </a>
     <a class="nav-tab" id="nt-scanner" href="/Scanner" target="_parent">
-      <span class="nt-dot"></span><span class="nt-ico">📷</span><span>Scanner</span>
+      <span class="nt-dot"></span><span>📷</span><span>Scanner</span>
     </a>
   </div>
   <div class="tb-sep"></div>
-  <div class="tb-pill live">● 77 Stocks Live</div>
+  <div class="tb-pill live">● 77 Live</div>
   <div class="tb-sep"></div>
   <div class="tb-pill time" id="tb-clk">--:--:-- IST</div>
 </div>
 
-<!-- ══ BODY: map-pane (left 56%) | right-panel (right 44%) ══ -->
-<div id="body">
-
-  <!-- ── MAP PANE ── -->
-  <div id="map-pane">
-    <div class="map-col-hd">
-      ◉ <span class="map-col-hd-t">Correlation Map</span>
-      <div class="map-col-stats">
-        <span class="mcs on">▲ Sensex</span>
-        <span class="mcs">15 Markets</span>
-        <span class="mcs">Q1 FY26 · 90d</span>
-      </div>
+<!-- ══ MAP SECTION: full width 420px tall ══ -->
+<div id="map-section">
+  <div class="map-col-hd">
+    ◉ <span class="map-col-hd-t">Correlation Map</span>
+    <div class="map-col-stats">
+      <span class="mcs on">▲ Sensex</span>
+      <span class="mcs">15 Markets</span>
+      <span class="mcs">Q1 FY26 · 90d</span>
     </div>
-    <div id="tt">
-      <div class="tt-nm" id="tt-n"></div>
-      <div class="tt-ix"  id="tt-i"></div>
-      <div class="tt-row"><span class="tt-lb">Correlation r</span><span class="tt-r-val" id="tt-r"></span></div>
-      <div class="tt-row"><span class="tt-lb">Type</span><span class="tt-vl" id="tt-t"></span></div>
-      <div class="tt-row"><span class="tt-lb">Direction</span><span class="tt-vl" id="tt-d"></span></div>
-      <div class="tt-bar-tr"><div class="tt-bar-fl" id="tt-b"></div></div>
-      <div class="tt-hint">Hover for details · Q1 FY26 · 90-day r-values</div>
-    </div>
-    <div id="map-svg-wrap">
-      <svg id="map-svg" viewBox="0 0 1000 510" preserveAspectRatio="xMidYMid meet">
+  </div>
+  <div id="tt">
+    <div class="tt-nm" id="tt-n"></div>
+    <div class="tt-ix"  id="tt-i"></div>
+    <div class="tt-row"><span class="tt-lb">Correlation r</span><span class="tt-r-val" id="tt-r"></span></div>
+    <div class="tt-row"><span class="tt-lb">Type</span><span class="tt-vl" id="tt-t"></span></div>
+    <div class="tt-row"><span class="tt-lb">Direction</span><span class="tt-vl" id="tt-d"></span></div>
+    <div class="tt-bar-tr"><div class="tt-bar-fl" id="tt-b"></div></div>
+    <div class="tt-hint">Hover for details · Q1 FY26 · 90-day r-values</div>
+  </div>
+  <div id="map-svg-wrap">
+    <svg id="map-svg" viewBox="0 0 1000 510" preserveAspectRatio="xMidYMid meet">
       <rect width="1000" height="510" fill="#020408" pointer-events="none"/>
       <g class="bg-l">
         <line class="equat" x1="0" y1="260" x2="1000" y2="260"/>
@@ -273,63 +284,61 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <g id="corr-layer"></g>
       <g id="dots-layer"></g>
     </svg>
+  </div>
+</div><!-- /map-section -->
+
+<!-- ══ LOWER ROW: Market Context | Market Intelligence ══ -->
+<div id="lower-row">
+
+  <!-- Market Context (42%) -->
+  <div id="ctx-pane">
+    <div class="pane-hd">
+      ◈ <span class="pane-hd-t">Market Context</span>
+      <span class="pane-hd-r">IST <span id="ctx-clk" style="color:var(--amber)">--:--:--</span> · Ref <span style="color:var(--green)">Sensex</span></span>
     </div>
-  </div><!-- /map-pane -->
-
-  <!-- ── RIGHT PANEL: ctx (top 52%) | news (bottom 48%) ── -->
-  <div id="right-panel">
-
-    <!-- Market Context -->
-    <div id="ctx-pane">
-      <div class="pane-hd">
-        ◈ <span class="pane-hd-t">Market Context</span>
-        <span class="pane-hd-r">IST <span id="ctx-clk" style="color:var(--amber)">--:--:--</span> · Ref <span style="color:var(--green)">Sensex</span></span>
+    <div class="pane-scroll">
+      <div class="csec">
+        <div class="csec-t">// Indices Correlation → Sensex</div>
+        <div id="corr-cards"></div>
       </div>
-      <div class="pane-scroll">
-        <div class="csec">
-          <div class="csec-t">// Indices Correlation → Sensex</div>
-          <div id="corr-cards"></div>
-        </div>
-        <div class="csec">
-          <div class="csec-t">// Commodity Sensitivity</div>
-          <div id="com-cards"></div>
-        </div>
-        <div class="leg-s">
-          <div class="csec-t">// Legend</div>
-          <div class="leg-r"><div class="leg-d" style="background:#3db8ff"></div>Equity Index</div>
-          <div class="leg-r"><div class="leg-d" style="background:#ffb830"></div>Crude Oil (inverse)</div>
-          <div class="leg-r"><div class="leg-d" style="background:#00f0a0"></div>Currency / FX</div>
-          <div class="leg-r"><div class="leg-d" style="background:#b580ff"></div>Metals / Mining</div>
-          <div class="leg-r"><div class="leg-d" style="background:#ff3d5a"></div>Emerging Market</div>
-          <div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--bd)">
-            <div style="font-family:var(--mono);font-size:7px;color:var(--t3);line-height:1.7">
-              Dash lines flow → India<br>Thickness = r strength<br>Q1 FY26 · 90-day trailing
-            </div>
+      <div class="csec">
+        <div class="csec-t">// Commodity Sensitivity</div>
+        <div id="com-cards"></div>
+      </div>
+      <div class="leg-s">
+        <div class="csec-t">// Legend</div>
+        <div class="leg-r"><div class="leg-d" style="background:#3db8ff"></div>Equity Index</div>
+        <div class="leg-r"><div class="leg-d" style="background:#ffb830"></div>Crude Oil (inverse)</div>
+        <div class="leg-r"><div class="leg-d" style="background:#00f0a0"></div>Currency / FX</div>
+        <div class="leg-r"><div class="leg-d" style="background:#b580ff"></div>Metals / Mining</div>
+        <div class="leg-r"><div class="leg-d" style="background:#ff3d5a"></div>Emerging Market</div>
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)">
+          <div style="font-family:var(--mono);font-size:7px;color:var(--t3);line-height:1.7">
+            Dash lines flow → India · Thickness = r strength<br>Q1 FY26 · 90-day trailing
           </div>
         </div>
       </div>
-    </div><!-- /ctx-pane -->
+    </div>
+  </div><!-- /ctx-pane -->
 
-    <!-- Market Intelligence -->
-    <div id="news-pane">
-      <div class="pane-hd">⊛ <span class="pane-hd-t">Market Intelligence</span></div>
-      <div class="nf" id="news-filter">
-        <button class="nfb on"  onclick="filterNews('all',this)">ALL</button>
-        <button class="nfb" onclick="filterNews('Banking',this)">Banking</button>
-        <button class="nfb" onclick="filterNews('IT',this)">IT</button>
-        <button class="nfb" onclick="filterNews('Energy',this)">Energy</button>
-        <button class="nfb" onclick="filterNews('Metals',this)">Metals</button>
-        <button class="nfb" onclick="filterNews('Auto',this)">Auto</button>
-        <button class="nfb" onclick="filterNews('Pharma',this)">Pharma</button>
-      </div>
-      <div class="pane-scroll" id="news-list"></div>
-    </div><!-- /news-pane -->
+  <!-- Market Intelligence (flex:1) -->
+  <div id="news-pane">
+    <div class="pane-hd">⊛ <span class="pane-hd-t">Market Intelligence</span></div>
+    <div class="nf" id="news-filter">
+      <button class="nfb on"  onclick="filterNews('all',this)">ALL</button>
+      <button class="nfb" onclick="filterNews('Banking',this)">Banking</button>
+      <button class="nfb" onclick="filterNews('IT',this)">IT</button>
+      <button class="nfb" onclick="filterNews('Energy',this)">Energy</button>
+      <button class="nfb" onclick="filterNews('Metals',this)">Metals</button>
+      <button class="nfb" onclick="filterNews('Auto',this)">Auto</button>
+      <button class="nfb" onclick="filterNews('Pharma',this)">Pharma</button>
+    </div>
+    <div class="pane-scroll" id="news-list"></div>
+  </div><!-- /news-pane -->
 
-  </div><!-- /right-panel -->
+</div><!-- /lower-row -->
 
-</div><!-- /body -->
-
-<!-- ══ ALERT BAR ══ -->
+<!-- ══ ALERT BAR (sticky bottom) ══ -->
 <div id="alert-bar">
   <div class="a-tag">⚡ Live</div>
   <div class="a-ticker"><span class="a-scroll">

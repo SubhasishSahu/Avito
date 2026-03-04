@@ -82,4 +82,4 @@ _TPL = pathlib.Path(__file__).parent.parent / "assets" / "global.html"
 html = _TPL.read_text(encoding="utf-8")
 html = html.replace("__NEWS__", json.dumps(news, default=str, ensure_ascii=False))
 
-components.html(html, height=10000, scrolling=False)
+components.html(html, height=900, scrolling=True)
