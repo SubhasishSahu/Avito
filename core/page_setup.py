@@ -58,6 +58,12 @@ CHROME_CSS = """
     display: block !important;
     border: none !important;
   }
+
+  /* Force the components.html iframe to fill the full viewport height */
+  [data-testid="stCustomComponentV1"] iframe {
+    height: 100vh !important;
+    min-height: 100vh !important;
+  }
 </style>
 """
 

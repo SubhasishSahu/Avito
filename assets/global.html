@@ -65,27 +65,49 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 }
 .nav-tab.active .nt-dot{display:block}
 
-/* ── BODY ── */
-#body{flex:1;display:flex;min-height:0}
+/* ── BODY: map (left 56%) | right-panel (right 44%) ── */
+#body{flex:1;display:flex;min-height:0;overflow:hidden}
 
-/* ── MAP PANE 58% ── */
-#map-pane{flex:0 0 58%;position:relative;display:flex;flex-direction:column;
-  border-right:1px solid var(--bd);overflow:hidden}
-#map-svg-wrap{flex:1;position:relative;min-height:0;overflow:hidden}
+/* ── MAP PANE 56% ── */
+#map-pane{flex:0 0 56%;position:relative;display:flex;flex-direction:column;
+  border-right:1px solid var(--bd);overflow:hidden;min-width:0}
+
+/* map column header */
+.map-col-hd{height:32px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 12px;gap:8px;font-family:var(--mono);
+  font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
+.map-col-hd-t{color:var(--t2)}
+.map-col-stats{margin-left:auto;display:flex;gap:5px}
+.mcs{font-family:var(--mono);font-size:7px;padding:2px 6px;border-radius:2px;
+  border:1px solid var(--bd);color:var(--t3)}
+.mcs.on{border-color:rgba(0,240,160,.25);color:var(--green)}
+
+#map-svg-wrap{flex:1;position:relative;min-height:0;overflow:hidden;display:flex}
 #map-svg{width:100%;height:100%;display:block}
 
-/* ── CTX PANE 23% ── */
-#ctx-pane{flex:0 0 23%;display:flex;flex-direction:column;border-right:1px solid var(--bd);overflow:hidden}
-.pane-hd{height:36px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);
+/* ── RIGHT PANEL 44%: ctx top | news bottom, stacked vertically ── */
+#right-panel{flex:1;display:flex;flex-direction:column;
+  overflow:hidden;min-width:0;min-height:0}
+
+/* ── CTX PANE: top 52% of right panel ── */
+#ctx-pane{flex:0 0 52%;display:flex;flex-direction:column;
+  border-bottom:1px solid var(--bd);overflow:hidden;min-height:0}
+
+/* ── NEWS PANE: bottom 48% of right panel ── */
+#news-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+
+/* ── SHARED PANE HEADER ── */
+.pane-hd{height:32px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);
   display:flex;align-items:center;padding:0 12px;gap:6px;font-family:var(--mono);
   font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3)}
 .pane-hd-t{color:var(--t2)}
-.pane-scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+.pane-hd-r{margin-left:auto;font-size:7px;color:var(--t3)}
+
+/* ── SCROLL AREAS: min-height:0 is critical to shrink in flex context ── */
+.pane-scroll{flex:1;overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--bd2) transparent;min-height:0}
 .pane-scroll::-webkit-scrollbar{width:3px}
 .pane-scroll::-webkit-scrollbar-thumb{background:var(--bd2)}
-
-/* ── NEWS PANE flex 1 ── */
-#news-pane{flex:1;display:flex;flex-direction:column;overflow:hidden}
 
 /* ── ALERT BAR ── */
 #alert-bar{height:24px;flex-shrink:0;background:rgba(3,6,11,.98);border-top:1px solid var(--bd);
@@ -176,6 +198,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
 <body>
 <div id="shell">
 
+<!-- ══ TOPBAR ══ -->
 <div id="topbar">
   <div class="tb-logo"><div class="tb-pulse"></div>AVITO</div>
   <div class="tb-sep"></div>
@@ -184,47 +207,47 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
     <div class="tb-sub">SENSEX · NIFTY 50 · GLOBAL CORRELATION MONITOR · Q1 FY26</div>
   </div>
   <div class="tb-sp"></div>
-
-  <!-- ── PAGE NAV ── -->
   <div class="nav-tabs">
     <a class="nav-tab active" id="nt-global" href="/Global" target="_parent">
-      <span class="nt-dot"></span>
-      <span class="nt-ico">🌐</span>
-      <span>Global</span>
+      <span class="nt-dot"></span><span class="nt-ico">🌐</span><span>Global</span>
     </a>
     <a class="nav-tab" id="nt-portfolio" href="/Portfolio" target="_parent">
-      <span class="nt-dot"></span>
-      <span class="nt-ico">◈</span>
-      <span>Portfolio</span>
+      <span class="nt-dot"></span><span class="nt-ico">◈</span><span>Portfolio</span>
     </a>
     <a class="nav-tab" id="nt-scanner" href="/Scanner" target="_parent">
-      <span class="nt-dot"></span>
-      <span class="nt-ico">📷</span>
-      <span>Scanner</span>
+      <span class="nt-dot"></span><span class="nt-ico">📷</span><span>Scanner</span>
     </a>
   </div>
-
   <div class="tb-sep"></div>
   <div class="tb-pill live">● 77 Stocks Live</div>
   <div class="tb-sep"></div>
   <div class="tb-pill time" id="tb-clk">--:--:-- IST</div>
 </div>
 
+<!-- ══ BODY: map-pane (left 56%) | right-panel (right 44%) ══ -->
 <div id="body">
 
-<!-- MAP PANE -->
-<div id="map-pane">
-  <div id="tt">
-    <div class="tt-nm" id="tt-n"></div>
-    <div class="tt-ix" id="tt-i"></div>
-    <div class="tt-row"><span class="tt-lb">Correlation r</span><span class="tt-r-val" id="tt-r"></span></div>
-    <div class="tt-row"><span class="tt-lb">Type</span><span class="tt-vl" id="tt-t"></span></div>
-    <div class="tt-row"><span class="tt-lb">Direction</span><span class="tt-vl" id="tt-d"></span></div>
-    <div class="tt-bar-tr"><div class="tt-bar-fl" id="tt-b"></div></div>
-    <div class="tt-hint">Hover for details · Q1 FY26 · 90-day r-values</div>
-  </div>
-  <div id="map-svg-wrap">
-    <svg id="map-svg" viewBox="0 0 1000 510" preserveAspectRatio="xMidYMid meet">
+  <!-- ── MAP PANE ── -->
+  <div id="map-pane">
+    <div class="map-col-hd">
+      ◉ <span class="map-col-hd-t">Correlation Map</span>
+      <div class="map-col-stats">
+        <span class="mcs on">▲ Sensex</span>
+        <span class="mcs">15 Markets</span>
+        <span class="mcs">Q1 FY26 · 90d</span>
+      </div>
+    </div>
+    <div id="tt">
+      <div class="tt-nm" id="tt-n"></div>
+      <div class="tt-ix"  id="tt-i"></div>
+      <div class="tt-row"><span class="tt-lb">Correlation r</span><span class="tt-r-val" id="tt-r"></span></div>
+      <div class="tt-row"><span class="tt-lb">Type</span><span class="tt-vl" id="tt-t"></span></div>
+      <div class="tt-row"><span class="tt-lb">Direction</span><span class="tt-vl" id="tt-d"></span></div>
+      <div class="tt-bar-tr"><div class="tt-bar-fl" id="tt-b"></div></div>
+      <div class="tt-hint">Hover for details · Q1 FY26 · 90-day r-values</div>
+    </div>
+    <div id="map-svg-wrap">
+      <svg id="map-svg" viewBox="0 0 1000 510" preserveAspectRatio="xMidYMid meet">
       <rect width="1000" height="510" fill="#020408" pointer-events="none"/>
       <g class="bg-l">
         <line class="equat" x1="0" y1="260" x2="1000" y2="260"/>
@@ -250,58 +273,63 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
       <g id="corr-layer"></g>
       <g id="dots-layer"></g>
     </svg>
-  </div>
-</div>
+    </div>
+  </div><!-- /map-pane -->
 
-<!-- CTX PANE -->
-<div id="ctx-pane">
-  <div class="pane-hd">◈ <span class="pane-hd-t">Market Context</span></div>
-  <div class="pane-scroll">
-    <div class="csec">
-      <div class="csec-t">// Indices Correlation → Sensex</div>
-      <div id="corr-cards"></div>
-    </div>
-    <div class="csec">
-      <div class="csec-t">// Commodity Sensitivity</div>
-      <div id="com-cards"></div>
-    </div>
-    <div class="leg-s">
-      <div class="csec-t">// Legend</div>
-      <div class="leg-r"><div class="leg-d" style="background:#3db8ff"></div>Equity Index</div>
-      <div class="leg-r"><div class="leg-d" style="background:#ffb830"></div>Crude Oil (inverse)</div>
-      <div class="leg-r"><div class="leg-d" style="background:#00f0a0"></div>Currency / FX</div>
-      <div class="leg-r"><div class="leg-d" style="background:#b580ff"></div>Metals / Mining</div>
-      <div class="leg-r"><div class="leg-d" style="background:#ff3d5a"></div>Emerging Market</div>
-      <div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--bd)">
-        <div style="font-family:var(--mono);font-size:7px;color:var(--t3);line-height:1.7">
-          Dash lines flow → India<br>Thickness = r strength<br>Q1 FY26 · 90-day trailing
+  <!-- ── RIGHT PANEL: ctx (top 52%) | news (bottom 48%) ── -->
+  <div id="right-panel">
+
+    <!-- Market Context -->
+    <div id="ctx-pane">
+      <div class="pane-hd">
+        ◈ <span class="pane-hd-t">Market Context</span>
+        <span class="pane-hd-r">IST <span id="ctx-clk" style="color:var(--amber)">--:--:--</span> · Ref <span style="color:var(--green)">Sensex</span></span>
+      </div>
+      <div class="pane-scroll">
+        <div class="csec">
+          <div class="csec-t">// Indices Correlation → Sensex</div>
+          <div id="corr-cards"></div>
+        </div>
+        <div class="csec">
+          <div class="csec-t">// Commodity Sensitivity</div>
+          <div id="com-cards"></div>
+        </div>
+        <div class="leg-s">
+          <div class="csec-t">// Legend</div>
+          <div class="leg-r"><div class="leg-d" style="background:#3db8ff"></div>Equity Index</div>
+          <div class="leg-r"><div class="leg-d" style="background:#ffb830"></div>Crude Oil (inverse)</div>
+          <div class="leg-r"><div class="leg-d" style="background:#00f0a0"></div>Currency / FX</div>
+          <div class="leg-r"><div class="leg-d" style="background:#b580ff"></div>Metals / Mining</div>
+          <div class="leg-r"><div class="leg-d" style="background:#ff3d5a"></div>Emerging Market</div>
+          <div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--bd)">
+            <div style="font-family:var(--mono);font-size:7px;color:var(--t3);line-height:1.7">
+              Dash lines flow → India<br>Thickness = r strength<br>Q1 FY26 · 90-day trailing
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-    <div style="padding:9px 11px;font-family:var(--mono);font-size:8px;color:var(--t3)">
-      IST <span id="ctx-clk" style="color:var(--amber)">--:--:--</span>
-      &nbsp;·&nbsp; Ref: <span style="color:var(--green)">Sensex</span>
-    </div>
-  </div>
-</div>
+    </div><!-- /ctx-pane -->
 
-<!-- NEWS PANE -->
-<div id="news-pane">
-  <div class="pane-hd">⊛ <span class="pane-hd-t">Market Intelligence</span></div>
-  <div class="nf" id="news-filter">
-    <button class="nfb on" onclick="filterNews('all',this)">ALL</button>
-    <button class="nfb" onclick="filterNews('Banking',this)">Banking</button>
-    <button class="nfb" onclick="filterNews('IT',this)">IT</button>
-    <button class="nfb" onclick="filterNews('Energy',this)">Energy</button>
-    <button class="nfb" onclick="filterNews('Metals',this)">Metals</button>
-    <button class="nfb" onclick="filterNews('Auto',this)">Auto</button>
-    <button class="nfb" onclick="filterNews('Pharma',this)">Pharma</button>
-  </div>
-  <div class="pane-scroll" id="news-list"></div>
-</div>
+    <!-- Market Intelligence -->
+    <div id="news-pane">
+      <div class="pane-hd">⊛ <span class="pane-hd-t">Market Intelligence</span></div>
+      <div class="nf" id="news-filter">
+        <button class="nfb on"  onclick="filterNews('all',this)">ALL</button>
+        <button class="nfb" onclick="filterNews('Banking',this)">Banking</button>
+        <button class="nfb" onclick="filterNews('IT',this)">IT</button>
+        <button class="nfb" onclick="filterNews('Energy',this)">Energy</button>
+        <button class="nfb" onclick="filterNews('Metals',this)">Metals</button>
+        <button class="nfb" onclick="filterNews('Auto',this)">Auto</button>
+        <button class="nfb" onclick="filterNews('Pharma',this)">Pharma</button>
+      </div>
+      <div class="pane-scroll" id="news-list"></div>
+    </div><!-- /news-pane -->
+
+  </div><!-- /right-panel -->
 
 </div><!-- /body -->
 
+<!-- ══ ALERT BAR ══ -->
 <div id="alert-bar">
   <div class="a-tag">⚡ Live</div>
   <div class="a-ticker"><span class="a-scroll">
@@ -579,6 +607,19 @@ function navTo(page) {
     }
   }, 120);
 }
+
+// ── Viewport height bridge ─────────────────────────────────────────────────
+// Tells Streamlit to resize the iframe to the actual screen height so the
+// HTML layout fills the viewport exactly with no gaps or scrollbars.
+function notifyHeight(){
+  try{ window.parent.postMessage({type:'streamlit:setFrameHeight', height:window.innerHeight}, '*'); }catch(e){}
+}
+window.addEventListener('resize', function(){
+  clearTimeout(window._rTmr);
+  window._rTmr = setTimeout(function(){ buildCorrLines(); notifyHeight(); }, 200);
+});
+window.addEventListener('load', notifyHeight);
+setTimeout(notifyHeight, 400);
 </script>
 </body>
 </html>

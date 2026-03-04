@@ -66,4 +66,4 @@ document.body.style.overflow = 'hidden';
 </script>"""
     html = html.replace("</head>", sizing_script + "\n</head>")
 
-    components.html(html, height=900, scrolling=False)
+    components.html(html, height=10000, scrolling=False)
